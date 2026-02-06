@@ -1,0 +1,32 @@
+# ROS2 WebSocket ACT Client Configuration
+
+# WebSocket Server
+server:
+  url: "ws://localhost:8000"
+  timeout: 5.0  # seconds
+
+# Control Loop
+control:
+  fps: 10.0  # Control frequency in Hz
+  action_speed: 0.5  # Action smoothing factor (0-1)
+  max_action_change: 0.3  # Max action change per step (radians)
+
+# Robot
+robot:
+  id: "bw_robot"
+  type: "bw"  # Robot type
+
+# Action Chunking
+chunking:
+  chunk_size: 100  # Expected chunk size from server
+  
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_every_n_steps: 10  # Log every N steps
+
+# Safety
+safety:
+  enable_limits: true
+  max_joint_velocity: 1.0  # rad/s
+  emergency_stop_on_error: true

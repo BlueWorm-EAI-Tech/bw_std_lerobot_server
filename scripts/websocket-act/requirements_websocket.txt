@@ -1,0 +1,11 @@
+# Additional requirements for WebSocket ACT server
+# Install with: pip install -r requirements_websocket.txt
+
+# WebSocket support
+websockets>=12.0
+
+# Already included in LeRobot but listed here for reference:
+# torch>=2.0.0
+# torchvision>=0.15.0
+# numpy>=1.24.0
+# pillow>=9.5.0

@@ -1,0 +1,35 @@
+# WebSocket ACT Server Configuration
+# This file provides default configuration for the server
+# You can override these settings with command line arguments
+
+# Server settings
+server:
+  host: "0.0.0.0"  # Bind to all interfaces
+  port: 8000       # WebSocket port
+
+# Model settings
+model:
+  path: "/home/lcjs-szw/repos/lerobot/outputs/train/act_your_dataset_20260117/checkpoints/last/pretrained_model"
+  device: "cpu"    # Options: cpu, cuda, mps
+
+# Logging settings
+logging:
+  level: "INFO"    # Options: DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Performance settings (optional, for future enhancements)
+performance:
+  max_connections: 10          # Maximum concurrent connections
+  request_timeout: 30          # Request timeout in seconds
+  enable_compression: false    # Enable WebSocket compression
+  
+# Image processing (optional, for future enhancements)
+image:
+  max_size: [640, 480]        # Maximum image size [width, height]
+  format: "PNG"               # Default image format
+  quality: 95                 # JPEG quality (if using JPEG)
+
+# Action chunking (optional, for future enhancements)
+action:
+  chunk_size: null            # Override model's chunk size (null = use model default)
+  return_full_chunk: true     # Return full chunk or only n_action_steps
