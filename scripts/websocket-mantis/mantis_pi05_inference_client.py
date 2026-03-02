@@ -12,14 +12,8 @@ import logging
 import signal
 import sys
 import time
-from typing import Optional
-import numpy as np
 
-try:
-    import torch
-except ImportError:
-    print("请安装 PyTorch: pip install torch")
-    sys.exit(1)
+import numpy as np
 
 try:
     import cv2
@@ -98,7 +92,6 @@ class MantisROS2Interface:
             )
 
             # 发布关节命令
-            from std_msgs.msg import Float64MultiArray
             self._joint_pub = self._node.create_publisher(
                 Float64MultiArray, self.joint_cmd_topic, 10
             )
@@ -139,8 +132,6 @@ class PI05Model:
     """PI05 模型加载器"""
 
     def __init__(self, policy_path: str):
-        from lerobot.policies.factory import make_policy
-        from lerobot.policies.pi05.configuration_pi05 import PI05Config
 
         logger.info(f"加载 PI05 模型: {policy_path}")
 
@@ -200,7 +191,6 @@ class PI05Model:
 
     def get_image_action(self, image: np.ndarray, state: np.ndarray) -> np.ndarray:
         """基于图像的动作（用于相机图像输入）"""
-        import cv2
 
         # 简单的图像处理 - 调整大小用于显示
         # 实际动作仍然来自 PI05 模型

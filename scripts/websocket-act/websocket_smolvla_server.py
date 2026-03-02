@@ -46,7 +46,6 @@ from PIL import Image
 
 from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -87,7 +86,7 @@ class SmolVLAWebSocketServer:
         self.postprocessor = None
         self.policy_config = None
 
-        logger.info(f"Initializing SmolVLA WebSocket Server")
+        logger.info("Initializing SmolVLA WebSocket Server")
         logger.info(f"Model path: {model_path}")
         logger.info(f"Device: {device}")
         logger.info(f"Default task: {task}")

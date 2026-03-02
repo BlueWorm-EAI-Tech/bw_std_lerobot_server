@@ -41,8 +41,6 @@ import websockets
 from PIL import Image
 
 from lerobot.policies.factory import get_policy_class, make_pre_post_processors
-from lerobot.policies.pretrained import PreTrainedPolicy
-
 
 # Configure logging
 logging.basicConfig(
@@ -84,7 +82,7 @@ class PI05WebSocketServer:
         self.postprocessor = None
         self.policy_config = None
 
-        logger.info(f"Initializing PI05 WebSocket Server")
+        logger.info("Initializing PI05 WebSocket Server")
         logger.info(f"Model path: {model_path}")
         logger.info(f"Device: {device}")
         logger.info(f"Task: {task}")

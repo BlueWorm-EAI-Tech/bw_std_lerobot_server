@@ -14,9 +14,9 @@ import logging
 import signal
 import sys
 import time
-from typing import Optional
-from PIL import Image
+
 import numpy as np
+from PIL import Image
 
 try:
     import websockets
@@ -126,7 +126,7 @@ class MantisROS2Interface:
         """连接到 ROS2"""
         try:
             import rclpy
-            from sensor_msgs.msg import JointState, Image
+            from sensor_msgs.msg import Image, JointState
 
             if not rclpy.ok():
                 rclpy.init()
@@ -296,9 +296,9 @@ class PI05WebSocketClient:
     async def infer(
         self,
         state: np.ndarray,
-        env_cam: Optional[np.ndarray] = None,
-        left_wrist_cam: Optional[np.ndarray] = None,
-        right_wrist_cam: Optional[np.ndarray] = None,
+        env_cam: np.ndarray | None = None,
+        left_wrist_cam: np.ndarray | None = None,
+        right_wrist_cam: np.ndarray | None = None,
     ) -> dict:
         """发送观测数据，获取动作
 
@@ -313,9 +313,6 @@ class PI05WebSocketClient:
                 "timestep": 0
             }
         """
-        import base64
-        from PIL import Image
-        import io
 
         # 将 numpy 图像转换为 base64 JPEG
         def image_to_base64(image: np.ndarray) -> str:
@@ -361,7 +358,7 @@ class PI05WebSocketClient:
             "timestep": 0,
         }
 
-        start_time = time.perf_counter()
+        time.perf_counter()
         await self.websocket.send(json.dumps(request))
 
         # 接收响应
@@ -370,8 +367,8 @@ class PI05WebSocketClient:
                 self.websocket.recv(),
                 timeout=self.timeout
             )
-        except asyncio.TimeoutError:
-            raise RuntimeError(f"服务器超时 ({self.timeout}s)")
+        except asyncio.TimeoutError as err:
+            raise RuntimeError(f"服务器超时 ({self.timeout}s)") from err
 
         # 解析响应
         response = json.loads(response_str)
@@ -438,7 +435,6 @@ async def control_loop(client: PI05WebSocketClient, robot: MantisROS2Interface, 
     logger.info("按 Ctrl+C 退出")
 
     step_count = 0
-    last_state = None
     next_step_time = time.time()
 
     try:
@@ -478,7 +474,6 @@ async def control_loop(client: PI05WebSocketClient, robot: MantisROS2Interface, 
                     logger.debug(f"  Delta:    {(smoothed_action - state)[:4].round(4)}...")
 
                 step_count += 1
-                last_state = state
 
                 # 7. 常规日志
                 if step_count % 10 == 0:
@@ -616,6 +611,6 @@ if __name__ == "__main__":
             import rclpy
             if rclpy.ok():
                 rclpy.shutdown()
-        except:
+        except Exception:
             pass
         logger.info("客户端退出")
