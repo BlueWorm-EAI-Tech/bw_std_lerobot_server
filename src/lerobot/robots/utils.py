@@ -56,6 +56,11 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .bi_so_follower import BiSOFollower
 
         return BiSOFollower(config)
+    elif config.type == "mantis":
+        from .mantis import Mantis
+
+        return Mantis(config)
+
     elif config.type == "reachy2":
         from .reachy2 import Reachy2Robot
 

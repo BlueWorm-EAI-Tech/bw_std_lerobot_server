@@ -27,13 +27,45 @@ from lerobot.processor import (
     NormalizerProcessorStep,
     PolicyAction,
     PolicyProcessorPipeline,
+    ProcessorStep,
     ProcessorStepRegistry,
     RenameObservationsProcessorStep,
     TokenizerProcessorStep,
     UnnormalizerProcessorStep,
 )
 from lerobot.processor.converters import policy_action_to_transition, transition_to_policy_action
+from lerobot.processor.core import EnvTransition, TransitionKey
 from lerobot.utils.constants import POLICY_POSTPROCESSOR_DEFAULT_NAME, POLICY_PREPROCESSOR_DEFAULT_NAME
+
+
+@ProcessorStepRegistry.register(name="smolvla_move_task_to_complementary_data")
+class MoveTaskToComplementaryDataProcessorStep(ProcessorStep):
+    """
+    Processor step to move task from top level to complementary_data.
+    This is needed for SmolVLA which expects task in complementary_data.
+    """
+
+    def __call__(self, transition: EnvTransition) -> EnvTransition:
+        transition = transition.copy()
+
+        # Move task from top level to COMPLEMENTARY_DATA if it exists there
+        task_value = transition.get("task")
+        if task_value is not None:
+            complementary_data = transition.get(TransitionKey.COMPLEMENTARY_DATA, {})
+            if complementary_data is None:
+                complementary_data = {}
+            complementary_data["task"] = task_value
+            transition[TransitionKey.COMPLEMENTARY_DATA] = complementary_data
+
+        return transition
+
+    def transform_features(
+        self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
+    ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
+        """
+        This step does not alter the feature definitions.
+        """
+        return features
 
 
 def make_smolvla_pre_post_processors(
@@ -68,7 +100,8 @@ def make_smolvla_pre_post_processors(
 
     input_steps = [
         RenameObservationsProcessorStep(rename_map={}),  # To mimic the same processor as pretrained one
-        AddBatchDimensionProcessorStep(),
+        MoveTaskToComplementaryDataProcessorStep(),  # Move task to complementary_data FIRST (before batch dimension)
+        AddBatchDimensionProcessorStep(),  # Add batch dimension AFTER moving task
         SmolVLANewLineProcessor(),
         TokenizerProcessorStep(
             tokenizer_name=config.vlm_model_name,

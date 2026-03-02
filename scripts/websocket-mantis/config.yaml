@@ -1,0 +1,31 @@
+# Mantis WebSocket 客户端配置
+
+# WebSocket 服务器
+server:
+  url: "ws://localhost:8000"
+  timeout: 5.0  # 秒
+
+# 控制循环
+control:
+  fps: 10.0  # 控制频率 (Hz)
+  action_speed: 0.5  # 动作平滑系数 (0-1)
+  max_action_change: 0.3  # 每步最大动作变化 (弧度)
+
+# ROS2 Topic 配置
+ros2:
+  joint_state_topic: "/joint_states"
+  joint_cmd_topic: "/joint_commands"
+  env_cam_topic: "/env_cam/image_raw"
+  left_wrist_cam_topic: "/left_wrist_cam/image_raw"
+  right_wrist_cam_topic: "/right_wrist_cam/image_raw"
+
+# 日志
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_every_n_steps: 10
+
+# 安全限制
+safety:
+  enable_limits: true
+  max_joint_velocity: 1.0  # rad/s
+  emergency_stop_on_error: true

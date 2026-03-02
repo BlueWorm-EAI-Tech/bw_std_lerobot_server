@@ -116,13 +116,11 @@ class TrainPipelineConfig(HubMixin):
             else:
                 self.job_name = f"{self.env.type}_{self.policy.type}"
 
-        # 临时禁用目录存在检查以解决初始化冲突问题
         if not self.resume and isinstance(self.output_dir, Path) and self.output_dir.is_dir():
-            print(f"警告: 输出目录 {self.output_dir} 已存在，但继续训练...")
-            # raise FileExistsError(
-            #     f"Output directory {self.output_dir} already exists and resume is {self.resume}. "
-            #     f"Please change your output directory so that {self.output_dir} is not overwritten."
-            # )
+            raise FileExistsError(
+                f"Output directory {self.output_dir} already exists and resume is {self.resume}. "
+                f"Please change your output directory so that {self.output_dir} is not overwritten."
+            )
         elif not self.output_dir:
             now = dt.datetime.now()
             train_dir = f"{now:%Y-%m-%d}/{now:%H-%M-%S}_{self.job_name}"

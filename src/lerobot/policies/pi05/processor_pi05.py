@@ -45,6 +45,37 @@ from lerobot.utils.constants import (
 )
 
 
+@ProcessorStepRegistry.register(name="move_task_to_complementary_data")
+@dataclass
+class MoveTaskToComplementaryDataProcessorStep(ProcessorStep):
+    """
+    Processor step to move task from top level to complementary_data.
+    This is needed for PI05 which expects task in complementary_data.
+    """
+
+    def __call__(self, transition: EnvTransition) -> EnvTransition:
+        transition = transition.copy()
+
+        # Move task from top level to COMPLEMENTARY_DATA if it exists there
+        task_value = transition.get("task")
+        if task_value is not None:
+            complementary_data = transition.get(TransitionKey.COMPLEMENTARY_DATA, {})
+            if complementary_data is None:
+                complementary_data = {}
+            complementary_data["task"] = task_value
+            transition[TransitionKey.COMPLEMENTARY_DATA] = complementary_data
+
+        return transition
+
+    def transform_features(
+        self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
+    ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
+        """
+        This step does not alter the feature definitions.
+        """
+        return features
+
+
 @ProcessorStepRegistry.register(name="pi05_prepare_state_tokenizer_processor_step")
 @dataclass
 class Pi05PrepareStateTokenizerProcessorStep(ProcessorStep):
@@ -61,6 +92,8 @@ class Pi05PrepareStateTokenizerProcessorStep(ProcessorStep):
         state = transition.get(TransitionKey.OBSERVATION, {}).get(OBS_STATE)
         if state is None:
             raise ValueError("State is required for PI05")
+
+        # Get tasks from complementary data - handle both list and tensor cases
         tasks = transition.get(TransitionKey.COMPLEMENTARY_DATA, {}).get(self.task_key)
         if tasks is None:
             raise ValueError("No task found in complementary data")
@@ -76,16 +109,31 @@ class Pi05PrepareStateTokenizerProcessorStep(ProcessorStep):
         state_np = state.cpu().numpy()
         discretized_states = np.digitize(state_np, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
 
+        # Handle tasks - convert from tensor to list if needed
+        if isinstance(tasks, torch.Tensor):
+            # If tasks is a tensor, convert to list of strings
+            if tasks.dim() == 0:
+                # Single task as tensor
+                task_str = str(tasks.item()) if tasks.dtype in [torch.int64, torch.int32] else tasks
+                tasks = [task_str]
+            else:
+                # Multiple tasks as tensor
+                tasks = [str(t) for t in tasks]
+
         full_prompts = []
         for i, task in enumerate(tasks):
-            cleaned_text = task.strip().replace("_", " ").replace("\n", " ")
+            # Convert to string if needed
+            if isinstance(task, torch.Tensor):
+                task_str = str(task.item()) if task.dtype in [torch.int64, torch.int32] else str(task)
+            else:
+                task_str = str(task)
+
+            cleaned_text = task_str.strip().replace("_", " ").replace("\n", " ")
             state_str = " ".join(map(str, discretized_states[i]))
             full_prompt = f"Task: {cleaned_text}, State: {state_str};\nAction: "
             full_prompts.append(full_prompt)
 
         transition[TransitionKey.COMPLEMENTARY_DATA][self.task_key] = full_prompts
-        # Normalize state to [-1, 1] range if needed (assuming it's already normalized by normalizer processor step!!)
-        # Discretize into 256 bins (see openpi `PaligemmaTokenizer.tokenize()`)
         return transition
 
     def transform_features(
@@ -109,11 +157,12 @@ def make_pi05_pre_post_processors(
 
     The pre-processing pipeline prepares input data for the model by:
     1. Renaming features to match pretrained configurations.
-    2. Normalizing input and output features based on dataset statistics.
-    3. Adding a batch dimension.
-    4. Appending a newline character to the task description for tokenizer compatibility.
-    5. Tokenizing the text prompt using the PaliGemma tokenizer.
-    6. Moving all data to the specified device.
+    2. Moving task to complementary_data (for PI05).
+    3. Normalizing input and output features based on dataset statistics.
+    4. Adding a batch dimension.
+    5. Preparing state and tokenizing the language input.
+    6. Tokenizing the text prompt using the PaliGemma tokenizer.
+    7. Moving all data to the specified device.
 
     The post-processing pipeline handles the model's output by:
     1. Moving data to the CPU.
@@ -132,6 +181,8 @@ def make_pi05_pre_post_processors(
     # Add remaining processors
     input_steps: list[ProcessorStep] = [
         RenameObservationsProcessorStep(rename_map={}),  # To mimic the same processor as pretrained one
+        # Move task from top level to COMPLEMENTARY_DATA for PI05
+        MoveTaskToComplementaryDataProcessorStep(),
         AddBatchDimensionProcessorStep(),
         # NOTE: NormalizerProcessorStep MUST come before Pi05PrepareStateTokenizerProcessorStep
         # because the tokenizer step expects normalized state in [-1, 1] range for discretization
@@ -142,7 +193,7 @@ def make_pi05_pre_post_processors(
         ),
         Pi05PrepareStateTokenizerProcessorStep(max_state_dim=config.max_state_dim),
         TokenizerProcessorStep(
-            tokenizer_name="google/paligemma-3b-pt-224",
+            tokenizer_name=getattr(config, 'text_tokenizer_name', 'google/paligemma-3b-pt-224'),
             max_length=config.tokenizer_max_length,
             padding_side="right",
             padding="max_length",

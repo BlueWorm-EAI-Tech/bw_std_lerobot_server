@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2025 Physical Intelligence and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Configuration for PI05 policy specifically designed for Mantis robot."""
+
 from dataclasses import dataclass, field
 
 from lerobot.configs.policies import PreTrainedConfig
@@ -21,27 +23,29 @@ from lerobot.configs.types import FeatureType, NormalizationMode, PolicyFeature
 from lerobot.optim.optimizers import AdamWConfig
 from lerobot.optim.schedulers import CosineDecayWithWarmupSchedulerConfig
 from lerobot.policies.rtc.configuration_rtc import RTCConfig
-from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE
-
-DEFAULT_IMAGE_SIZE = 224
+from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_LANGUAGE_ATTENTION_MASK, OBS_LANGUAGE_TOKENS, OBS_STATE
 
 
-@PreTrainedConfig.register_subclass("pi05")
+@PreTrainedConfig.register_subclass("pi05_mantis")
 @dataclass
-class PI05Config(PreTrainedConfig):
+class PI05MantisConfig(PreTrainedConfig):
+    """PI05 configuration optimized for Mantis robot training."""
+    
+    # Model architecture
     paligemma_variant: str = "gemma_2b"
     action_expert_variant: str = "gemma_300m"
     dtype: str = "float32"  # Options: "bfloat16", "float32"
 
+    # Observation and action settings - MATCH ACT SUCCESS CONFIGURATION
     n_obs_steps: int = 1
-    chunk_size: int = 50  # Number of action steps to predict, in openpi called "action_horizon"
-    n_action_steps: int = 50  # Number of action steps to execute
+    chunk_size: int = 100  # Match ACT successful configuration
+    n_action_steps: int = 100  # Match ACT successful configuration
 
-    # Shorter state and action vectors will be padded to these dimensions
-    max_state_dim: int = 32
-    max_action_dim: int = 32
+    # State and action dimensions - MATCH DATASET (16-dimensional)
+    max_state_dim: int = 16  # Exact match with dataset
+    max_action_dim: int = 16  # Exact match with dataset
 
-    # Flow matching parameters: see openpi `PI0Pytorch`
+    # Flow matching parameters
     num_inference_steps: int = 10
     time_sampling_beta_alpha: float = 1.5
     time_sampling_beta_beta: float = 1.0
@@ -50,53 +54,43 @@ class PI05Config(PreTrainedConfig):
     min_period: float = 4e-3
     max_period: float = 4.0
 
-    # Real-Time Chunking (RTC) configuration
-    rtc_config: RTCConfig | None = None
-
-    image_resolution: tuple[int, int] = (
-        DEFAULT_IMAGE_SIZE,
-        DEFAULT_IMAGE_SIZE,
-    )  # see openpi `preprocessing_pytorch.py`
-
-    # Add empty images. Used to add empty cameras when no image features are present.
+    # Image settings
+    image_resolution: tuple[int, int] = (224, 224)
     empty_cameras: int = 0
 
-    tokenizer_max_length: int = 200  # see openpi `__post_init__`
-    text_tokenizer_name: str = "google/paligemma-3b-pt-224"  # 可配置的tokenizer名称
-
+    # Language processing - REQUIRED FOR MANTIS
+    tokenizer_max_length: int = 200
+    
+    # Normalization - Use quantiles like ACT
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
             "VISUAL": NormalizationMode.IDENTITY,
-            "STATE": NormalizationMode.QUANTILES,  # Pi0.5 uses quantiles for state
-            "ACTION": NormalizationMode.QUANTILES,  # Pi0.5 uses quantiles for action
+            "STATE": NormalizationMode.QUANTILES,
+            "ACTION": NormalizationMode.QUANTILES,
         }
     )
 
-    # Training settings
-    gradient_checkpointing: bool = False  # Enable gradient checkpointing for memory optimization
-    compile_model: bool = False  # Whether to use torch.compile for model optimization
-    compile_mode: str = "max-autotune"  # Torch compile mode
-    device: str | None = None  # Device to use for the model (None = auto-detect)
+    # Training optimizations
+    gradient_checkpointing: bool = False
+    compile_model: bool = False
+    compile_mode: str = "max-autotune"
+    device: str | None = None
 
-    # Finetuning settings
-    freeze_vision_encoder: bool = False  # Freeze only the vision encoder
-    train_expert_only: bool = False  # Freeze entire VLM, train only action expert and projections
+    # Fine-tuning settings
+    freeze_vision_encoder: bool = False
+    train_expert_only: bool = False
 
-    # Optimizer settings: see openpi `AdamW`
-    optimizer_lr: float = 2.5e-5  # see openpi `CosineDecaySchedule: peak_lr`
+    # Optimizer settings - MATCH ACT LEARNING RATE
+    optimizer_lr: float = 1e-5  # Conservative learning rate
     optimizer_betas: tuple[float, float] = (0.9, 0.95)
     optimizer_eps: float = 1e-8
     optimizer_weight_decay: float = 0.01
     optimizer_grad_clip_norm: float = 1.0
 
-    # Scheduler settings: see openpi `CosineDecaySchedule`
-    # Note: These will auto-scale if --steps < scheduler_decay_steps
-    # For example, --steps=3000 will scale warmup to 100 and decay to 3000
-    scheduler_warmup_steps: int = 1_000
-    scheduler_decay_steps: int = 30_000
-    scheduler_decay_lr: float = 2.5e-6
-
-    tokenizer_max_length: int = 200  # see openpi `__post_init__`
+    # Scheduler settings
+    scheduler_warmup_steps: int = 1000
+    scheduler_decay_steps: int = 30000
+    scheduler_decay_lr: float = 1e-6
 
     def __post_init__(self):
         super().__post_init__()
@@ -117,26 +111,59 @@ class PI05Config(PreTrainedConfig):
             raise ValueError(f"Invalid dtype: {self.dtype}")
 
     def validate_features(self) -> None:
-        """Validate and set up input/output features."""
+        """Validate and set up input/output features for Mantis robot."""
+        # Image features - match dataset cameras
+        image_features = [
+            "observation.images.env_cam",
+            "observation.images.left_wrist_cam", 
+            "observation.images.right_wrist_cam"
+        ]
+        
+        for img_key in image_features:
+            if img_key not in self.input_features:
+                image_feature = PolicyFeature(
+                    type=FeatureType.VISUAL,
+                    shape=(3, *self.image_resolution),
+                )
+                self.input_features[img_key] = image_feature
+
+        # Empty cameras
         for i in range(self.empty_cameras):
             key = OBS_IMAGES + f".empty_camera_{i}"
             empty_camera = PolicyFeature(
                 type=FeatureType.VISUAL,
-                shape=(3, *self.image_resolution),  # Use configured image resolution
+                shape=(3, *self.image_resolution),
             )
             self.input_features[key] = empty_camera
 
+        # State feature - 16 dimensional like dataset
         if OBS_STATE not in self.input_features:
             state_feature = PolicyFeature(
                 type=FeatureType.STATE,
-                shape=(self.max_state_dim,),  # Padded to max_state_dim
+                shape=(self.max_state_dim,),
             )
             self.input_features[OBS_STATE] = state_feature
 
+        # Language features - REQUIRED FOR PI05
+        if OBS_LANGUAGE_TOKENS not in self.input_features:
+            language_tokens = PolicyFeature(
+                type=FeatureType.LANGUAGE_TOKENS,
+                shape=(self.tokenizer_max_length,),
+            )
+            self.input_features[OBS_LANGUAGE_TOKENS] = language_tokens
+            
+        if OBS_LANGUAGE_ATTENTION_MASK not in self.input_features:
+            language_mask = PolicyFeature(
+                type=FeatureType.LANGUAGE_ATTENTION_MASK,
+                shape=(self.tokenizer_max_length,),
+            )
+            self.input_features[OBS_LANGUAGE_ATTENTION_MASK] = language_mask
+
+        # Action feature - 16 dimensional like dataset
         if ACTION not in self.output_features:
             action_feature = PolicyFeature(
                 type=FeatureType.ACTION,
-                shape=(self.max_action_dim,),  # Padded to max_action_dim
+                shape=(self.max_action_dim,),
             )
             self.output_features[ACTION] = action_feature
 

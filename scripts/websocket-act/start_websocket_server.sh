@@ -2,12 +2,12 @@
 # Convenience script to start the WebSocket ACT server
 
 # Default configuration
-PORT=8000
+PORT=8002
 HOST="0.0.0.0"
 # MODEL_PATH="/home/lcjs-szw/repos/lerobot/outputs/train/act_your_dataset_20260117/checkpoints/last/pretrained_model"
 # MODEL_PATH="/home/lcjs-szw/repos/lerobot/outputs/train/act_20260118_fixed_shoulder_roll_join/checkpoints/last/pretrained_model"
 MODEL_PATH="/home/lcjs-szw/outputs/train/act_20260121/checkpoints/060000/pretrained_model"
-DEVICE="cpu"
+DEVICE="cuda"
 LOG_LEVEL="INFO"
 
 # Parse command line arguments
@@ -83,7 +83,8 @@ echo "=========================================="
 echo ""
 
 # Start the server
-python websocket_act_server.py \
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python "$SCRIPT_DIR/websocket_act_server.py" \
     --port "$PORT" \
     --host "$HOST" \
     --model_path "$MODEL_PATH" \

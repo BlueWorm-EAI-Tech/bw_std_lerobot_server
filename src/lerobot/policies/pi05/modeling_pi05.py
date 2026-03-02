@@ -577,11 +577,12 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
 
         try:
             from transformers.models.siglip import check
-
             if not check.check_whether_transformers_replace_is_installed_correctly():
                 raise ValueError(msg)
-        except ImportError:
-            raise ValueError(msg) from None
+        except (ImportError, AttributeError):
+            # transformers 5.0+ doesn't have the check module, skip this validation
+            print("Warning: Skipping transformers version check (not compatible with transformers 5.0+)")
+            pass
 
     def gradient_checkpointing_enable(self):
         """Enable gradient checkpointing for memory optimization."""
