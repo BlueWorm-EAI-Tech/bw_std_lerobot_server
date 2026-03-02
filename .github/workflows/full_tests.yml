@@ -101,10 +101,6 @@ jobs:
     name: Build and Push Docker
     runs-on: ubuntu-latest
     if: false
-    if: |
-      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && github.event.pull_request.head.repo.fork == false) ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
     outputs:
       image_tag: ${{ steps.set_tag.outputs.image_tag }}
     env:
