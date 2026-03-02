@@ -54,9 +54,11 @@ concurrency:
 jobs:
   # This job runs pytests with the default dependencies.
   # It runs everytime we commit to a PR or push to main
+  # DISABLED for fork - requires full environment
   fast-pytest-tests:
     name: Fast Pytest Tests
     runs-on: ubuntu-latest
+    if: false
     env:
       MUJOCO_GL: egl
       HF_HOME: /mnt/cache/.cache/huggingface
