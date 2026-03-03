@@ -46,6 +46,9 @@ When implementing a new policy class (e.g. `DiffusionPolicy`) follow these steps
 
 import itertools
 
+# Import robot modules to register them
+from lerobot.robots import mantis  # noqa: F401
+
 from lerobot.__version__ import __version__  # noqa: F401
 
 # TODO(rcadene): Improve policies and envs. As of now, an item in `available_policies`
@@ -166,6 +169,7 @@ available_robots = [
     "aloha",
     "so100",
     "so101",
+    "mantis",
 ]
 
 # lists all available cameras from `lerobot/cameras`
