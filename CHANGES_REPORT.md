@@ -282,7 +282,63 @@ python -m lerobot.scripts.lerobot_train \
 
 ---
 
-## 10. 提交历史
+## 10. 推理命令汇总
+
+### 10.1 ACT 推理服务器
+
+```bash
+python scripts/websocket-server/act/websocket_act_server.py \
+  --port 8005 \
+  --host 0.0.0.0 \
+  --model_path /home/lcjs-szw/repos/lerobot/outputs/train/act_20260120/checkpoints/100000/pretrained_model \
+  --device cuda
+```
+
+### 10.2 SmolVLA 推理服务器
+
+```bash
+python scripts/websocket-server/smolvla/websocket_smolvla_server.py \
+  --port 8001 \
+  --host 0.0.0.0 \
+  --model_path /home/lcjs-szw/repos/lerobot/outputs/train/smolvla_mantis_ft_20260214_163714/checkpoints/060000/pretrained_model \
+  --device cuda
+```
+
+### 10.3 PI05 推理服务器
+
+```bash
+python scripts/websocket-server/pi05/websocket_pi05_server.py \
+  --port 8002 \
+  --host 0.0.0.0 \
+  --model_path /home/lcjs-szw/repos/lerobot/outputs/train/pi05_mantis_base_ft_20260215_162213/checkpoints/015000/pretrained_model \
+  --device cuda
+```
+
+### 10.4 已验证的推理服务
+
+| 策略 | 端口 | 模型路径 | 步数 | 状态 |
+|------|------|----------|------|------|
+| ACT | 8005 | `act_20260120/checkpoints/100000` | 100K | ✅ 已验证 |
+| SmolVLA | 8001 | `smolvla_mantis_ft_20260214_163714/checkpoints/060000` | 60K | ✅ 已验证 |
+| PI05 | 8002 | `pi05_mantis_base_ft_20260215_162213/checkpoints/015000` | 15K | ✅ 已验证 |
+
+### 10.5 推理输入输出格式
+
+**输入 (Observation):**
+- `observation.state`: 16 维浮点数数组
+- `observation.images.env_cam`: base64 编码的图像 (240×320)
+- `observation.images.left_wrist_cam`: base64 编码的图像 (240×424)
+- `observation.images.right_wrist_cam`: base64 编码的图像 (240×424)
+
+**输出 (Action):**
+- `action_chunk`: 数组，每个策略不同：
+  - ACT: 100 个 action，每个 16 维
+  - SmolVLA: 50 个 action，每个 16 维
+  - PI05: 100 个 action，每个 16 维
+
+---
+
+## 11. 提交历史
 
 | 提交 | 说明 |
 |------|------|
@@ -300,18 +356,19 @@ python -m lerobot.scripts.lerobot_train \
 
 ---
 
-## 11. 总结
+## 12. 总结
 
 本 fork 成功将 Mantis 双臂机器人集成到 LeRobot 框架中，同时：
 
 1. ✅ **遵循原工程规范** - 不修改核心策略，使用标准注册方式
-2. ✅ **完整的推理系统** - WebSocket 服务器 + 客户端
+2. ✅ **完整的推理系统** - WebSocket 服务器 + 客户端，支持 ACT/SmolVLA/PI05
 3. ✅ **规范的代码结构** - 与原工程保持一致
 4. ✅ **精简冗余** - 删除不必要的配置和脚本
 5. ✅ **修复转换脚本** - 使用 pop 代替 del 处理可选键
 6. ✅ **支持 v3.0 数据集** - 使用 pyav backend 避免兼容性问题
+7. ✅ **已验证推理服务** - 三个策略的 WebSocket 服务器均可正常运行
 
 ---
 
 *报告生成时间: 2026-03-04*
-*基于提交: origin/main..HEAD (13 commits)*
+*基于提交: origin/main..HEAD (14 commits)*
