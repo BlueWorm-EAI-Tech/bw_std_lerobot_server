@@ -20,9 +20,13 @@
 
 **使用方式：**
 ```bash
-lerobot-train --robot.type=mantis --policy.type=act ...
-lerobot-train --robot.type=mantis --policy.type=pi05 ...
-lerobot-train --robot.type=mantis --policy.type=smolvla ...
+# 离线训练（机器人类型从数据集元数据自动推断）
+lerobot-train --policy.type=act --dataset.repo_id=...
+lerobot-train --policy.type=pi05 --dataset.repo_id=...
+lerobot-train --policy.type=smolvla --dataset.repo_id=...
+
+# 实时推理（需要指定机器人类型）
+python -m lerobot.async_inference.robot_client --robot.type=mantis ...
 ```
 
 ### 1.2 WebSocket 推理系统
@@ -155,13 +159,13 @@ lerobot-mantis/
 
 ```bash
 # ACT 策略
-lerobot-train --policy.type=act --robot.type=mantis --dataset.repo_id=...
+lerobot-train --policy.type=act --dataset.repo_id=...
 
 # PI05 策略
-lerobot-train --policy.type=pi05 --robot.type=mantis --dataset.repo_id=...
+lerobot-train --policy.type=pi05 --dataset.repo_id=...
 
 # SmolVLA 策略
-lerobot-train --policy.type=smolvla --robot.type=mantis --dataset.repo_id=...
+lerobot-train --policy.type=smolvla --dataset.repo_id=...
 ```
 
 ### 7.2 推理
@@ -176,10 +180,115 @@ python scripts/websocket-mantis/mantis_websocket_client.py --server ws://SERVER:
 
 ---
 
-## 8. 提交历史
+## 8. 已知问题和解决方案
+
+### 8.1 数据集格式问题
+
+| 问题 | 解决方案 |
+|------|----------|
+| 数据集是 v2.1 格式 | 使用 `pick_place_cube_0121` (已是 v3.0) 或手动转换 |
+| `torchcodec` 与 FFmpeg 不兼容 | 使用 `--dataset.video_backend=pyav` |
+
+### 8.2 转换脚本 Bug
+
+**文件:** `src/lerobot/datasets/v30/convert_dataset_v21_to_v30.py`
+
+**问题:** 使用 `del` 删除可能不存在的键导致 KeyError
+
+**修复:**
+```python
+# 修复前
+del info["total_chunks"]
+del info["total_videos"]
+
+# 修复后
+info.pop("total_chunks", None)
+info.pop("total_videos", None)
+```
+
+---
+
+## 9. 训练命令汇总
+
+### 9.1 ACT 训练
+
+```bash
+lerobot-train \
+  --dataset.repo_id=pick_place_cube_0121 \
+  --dataset.root=/home/lcjs-szw/datasets/datasets/pick_place_cube_0121 \
+  --dataset.video_backend=pyav \
+  --policy.type=act \
+  --output_dir=outputs/train/act_xxx \
+  --policy.device=cuda \
+  --wandb.enable=false \
+  --policy.repo_id=your_username/act_policy
+```
+
+### 9.2 SmolVLA 训练
+
+```bash
+python -m lerobot.scripts.lerobot_train \
+  --policy.type=smolvla \
+  --policy.pretrained_path=lerobot/smolvla_base \
+  --dataset.repo_id=/home/lcjs-szw/datasets/datasets/pick_place_cube_0121 \
+  --dataset.root=/home/lcjs-szw/datasets/datasets/pick_place_cube_0121 \
+  --dataset.video_backend=pyav \
+  --output_dir=outputs/train/smolvla_mantis_ft \
+  --steps=10000 \
+  --batch_size=2 \
+  --policy.n_obs_steps=1 \
+  --policy.chunk_size=50 \
+  --policy.n_action_steps=50 \
+  --policy.max_state_dim=32 \
+  --policy.max_action_dim=32 \
+  --policy.freeze_vision_encoder=true \
+  --policy.train_expert_only=true \
+  --policy.optimizer_lr=1e-5 \
+  --policy.push_to_hub=false \
+  --wandb.enable=false
+```
+
+### 9.3 PI05 训练
+
+```bash
+python -m lerobot.scripts.lerobot_train \
+  --policy.type=pi05 \
+  --policy.pretrained_path=lerobot/pi05_base \
+  --dataset.repo_id=/home/lcjs-szw/datasets/datasets/pick_place_cube_0121 \
+  --dataset.root=/home/lcjs-szw/datasets/datasets/pick_place_cube_0121 \
+  --dataset.video_backend=pyav \
+  --output_dir=outputs/train/pi05_mantis \
+  --steps=10000 \
+  --batch_size=4 \
+  --policy.n_obs_steps=1 \
+  --policy.chunk_size=15 \
+  --policy.n_action_steps=15 \
+  --policy.max_state_dim=32 \
+  --policy.max_action_dim=32 \
+  --policy.optimizer_lr=2.5e-5 \
+  --policy.push_to_hub=false \
+  --wandb.enable=false
+```
+
+### 9.4 离线训练说明
+
+**注意:** 离线训练（使用已有数据集）不需要指定 `--env` 参数。
+
+| 模式 | 需要 env 吗 | 说明 |
+|------|------------|------|
+| 离线训练 | ❌ 不需要 | 只在数据集上训练 |
+| 在线训练 | ✅ 需要 | 实时控制机械臂 |
+| 评估/推理 | ✅ 需要 | 运行模型控制机械臂 |
+
+---
+
+## 10. 提交历史
 
 | 提交 | 说明 |
 |------|------|
+| `44cd4a75` | 注册 mantis 机器人到 available_robots |
+| `3717d7e7` | 删除重复的 policies 目录 |
+| `364e4b06` | 添加项目改动报告 |
 | `9bfd88d3` | 删除 pi05_mantis policy 配置 |
 | `fb794989` | 精简训练脚本至 5 个 |
 | `2b09e2a3` | 重组织 websocket 脚本 |
@@ -191,7 +300,7 @@ python scripts/websocket-mantis/mantis_websocket_client.py --server ws://SERVER:
 
 ---
 
-## 9. 总结
+## 11. 总结
 
 本 fork 成功将 Mantis 双臂机器人集成到 LeRobot 框架中，同时：
 
@@ -199,8 +308,10 @@ python scripts/websocket-mantis/mantis_websocket_client.py --server ws://SERVER:
 2. ✅ **完整的推理系统** - WebSocket 服务器 + 客户端
 3. ✅ **规范的代码结构** - 与原工程保持一致
 4. ✅ **精简冗余** - 删除不必要的配置和脚本
+5. ✅ **修复转换脚本** - 使用 pop 代替 del 处理可选键
+6. ✅ **支持 v3.0 数据集** - 使用 pyav backend 避免兼容性问题
 
 ---
 
-*报告生成时间: 2026-03-03*
-*基于提交: origin/main..HEAD (12 commits)*
+*报告生成时间: 2026-03-04*
+*基于提交: origin/main..HEAD (13 commits)*

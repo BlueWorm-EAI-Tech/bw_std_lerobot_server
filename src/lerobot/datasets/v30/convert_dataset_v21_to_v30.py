@@ -428,8 +428,8 @@ def convert_episodes_metadata(root, new_root, episodes_metadata, episodes_video_
 def convert_info(root, new_root, data_file_size_in_mb, video_file_size_in_mb):
     info = load_info(root)
     info["codebase_version"] = V30
-    del info["total_chunks"]
-    del info["total_videos"]
+    info.pop("total_chunks", None)
+    info.pop("total_videos", None)
     info["data_files_size_in_mb"] = data_file_size_in_mb
     info["video_files_size_in_mb"] = video_file_size_in_mb
     info["data_path"] = DEFAULT_DATA_PATH

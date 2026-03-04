@@ -9,6 +9,21 @@ lerobot-train \
   --policy.repo_id=zhenxuan/act_policy
 
 
+lerobot-train \
+  --dataset.repo_id=pick_place_cube_0121 \
+  --dataset.root=/home/lcjs-szw/datasets/datasets/pick_place_cube_0121 \
+  --dataset.video_backend=pyav \
+  --policy.type=act \
+  --output_dir=outputs/train/act_20260303 \
+  --job_name=act_20260303 \
+  --policy.device=cuda \
+  --wandb.enable=false \
+  --policy.repo_id=zhenxuan/act_policy
+
+
+
+
+
 
 python -m lerobot.async_inference.robot_client \
     --server_address=123.56.216.162:8000 \ # SERVER: the host address and port of the policy server
@@ -38,3 +53,79 @@ lerobot-edit-dataset \
     --operation.repo_ids "['/home/lcjs-szw/202601160936/bw_bag_20260116_093645_001', '/home/lcjs-szw/202601160936/bw_bag_20260116_093645_003']"
 
 
+
+
+不同 Policy 的训练和推理指令
+注意: 训练时机器人类型从数据集元数据自动推断，无需额外指定
+
+1. ACT 策略
+训练：
+
+
+lerobot-train \
+  --policy.type=act \
+  --dataset.repo_id=your_dataset \
+  --dataset.root=/path/to/data \
+  --output_dir=outputs/train/act_mantis
+推理（WebSocket）：
+
+
+# 服务器
+python scripts/websocket-server/act/websocket_act_server.py \
+  --model-path /path/to/checkpoint
+
+# 客户端
+python scripts/websocket-server/ros2/ros2_websocket_act_client.py \
+  --server ws://localhost:8000
+2. PI05 策略
+训练：
+
+
+lerobot-train \
+  --policy.type=pi05 \
+  --dataset.repo_id=your_dataset \
+  --dataset.root=/path/to/data \
+  --output_dir=outputs/train/pi05_mantis
+推理（WebSocket）：
+
+
+# 服务器
+python scripts/websocket-server/pi05/websocket_pi05_server.py \
+  --model-path /path/to/checkpoint
+
+# 客户端
+python scripts/websocket-mantis/mantis_websocket_client.py \
+  --server ws://localhost:8000
+3. SmolVLA 策略
+训练：
+
+
+lerobot-train \
+  --policy.type=smolvla \
+  --policy.pretrained_path=smolvla/pretrained \
+  --dataset.repo_id=your_dataset \
+  --dataset.root=/path/to/data \
+  --output_dir=outputs/train/smolvla_mantis
+推理（WebSocket）：
+
+
+# 服务器
+python scripts/websocket-server/smolvla/websocket_smolvla_server.py \
+  --model-path /path/to/checkpoint
+
+# 客户端
+python scripts/websocket-mantis/mantis_websocket_client.py \
+  --server ws://localhost:8001
+4. 通用参数说明
+参数	说明
+--policy.type	策略类型 (act, pi05, smolvla, diffusion, etc.)
+--robot.type	机器人类型 (mantis, reachy2, so100, unitree_g1, etc.) - 仅用于实时推理
+--dataset.repo_id	数据集 ID
+--dataset.root	本地数据路径
+--output_dir	输出目录
+5. 本地推理（不依赖 WebSocket）
+
+# PI05 本地推理
+python scripts/websocket-mantis/mantis_pi05_inference_client.py \
+  --model-path /path/to/checkpoint \
+  --robot-id mantis_robot

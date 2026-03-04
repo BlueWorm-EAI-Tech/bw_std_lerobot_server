@@ -1,5 +1,6 @@
 #!/bin/bash
 # 使用 LeRobot 框架训练 Pi0.5 模型 for Mantis
+# 注意: 机器人类型从数据集元数据中自动推断，无需额外指定
 
 set -e
 
@@ -35,22 +36,23 @@ echo ""
 
 # 检查数据集
 if [ ! -d "$DATASET_PATH" ]; then
-    echo "❌ 错误: 数据集不存在: $DATASET_PATH"
+    echo "错误: 数据集不存在: $DATASET_PATH"
     exit 1
 fi
 
 # 检查是否有 GPU
 if ! python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
-    echo "⚠️  警告: 未检测到 GPU，训练将使用 CPU（速度会很慢）"
+    echo "警告: 未检测到 GPU，训练将使用 CPU（速度会很慢）"
 fi
 
 # 开始训练
+# 机器人类型从数据集元数据自动推断
 python -m lerobot.scripts.lerobot_train \
-    policy=pi05 \
-    env=mantis \
-    dataset_repo_id="$DATASET_PATH" \
-    pretrained_policy_name_or_path="$PRETRAINED_MODEL" \
-    hydra.run.dir="$OUTPUT_DIR" \
+    --policy.type=pi05 \
+    --dataset.repo_id="$DATASET_PATH" \
+    --dataset.root="$DATASET_PATH" \
+    --pretrained_policy_name_or_path="$PRETRAINED_MODEL" \
+    --output_dir="$OUTPUT_DIR" \
     training.offline_steps=$STEPS \
     training.batch_size=$BATCH_SIZE \
     training.eval_freq=$EVAL_FREQ \
@@ -69,6 +71,6 @@ python -m lerobot.scripts.lerobot_train \
 
 echo ""
 echo "=========================================="
-echo "✅ 训练完成！"
+echo "训练完成！"
 echo "模型保存在: $OUTPUT_DIR"
 echo "=========================================="
