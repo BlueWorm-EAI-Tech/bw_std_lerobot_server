@@ -1,0 +1,274 @@
+{
+  "target": {
+    "episode_index": 61,
+    "frame_index": 614,
+    "center_global_index": 33597,
+    "window_frames": [
+      584,
+      643
+    ],
+    "window_size": 60,
+    "left_wrist_dims": [
+      4,
+      5,
+      6
+    ]
+  },
+  "per_model": {
+    "raw_60k": {
+      "mae_vs_action_left_wrist3": 0.06224798029256312,
+      "mae_vs_state_left_wrist3": 0.0772208307030572,
+      "rmse_vs_action_left_wrist3": 0.08928494154202637,
+      "center_frame": {
+        "frame_index": 614,
+        "state_left_wrist3": [
+          -0.103094,
+          0.210028,
+          0.47165
+        ],
+        "action_left_wrist3": [
+          -0.008315,
+          -0.056162,
+          0.070022
+        ],
+        "pred_left_wrist3": [
+          -0.086496,
+          0.041496,
+          0.346001
+        ]
+      },
+      "per_dim": {
+        "roll": {
+          "mae_vs_action": 0.047451919348289566,
+          "mae_vs_state": 0.03775960287700097,
+          "best_lag_to_action": {
+            "lag": 0,
+            "corr": 0.9872299159091636
+          },
+          "best_lag_to_state": {
+            "lag": 7,
+            "corr": 0.9854584079781216
+          },
+          "action_range": [
+            -0.22521980106830597,
+            0.06453575938940048
+          ],
+          "pred_range": [
+            -0.23567891120910645,
+            -0.014448806643486023
+          ]
+        },
+        "pitch": {
+          "mae_vs_action": 0.025274275243282317,
+          "mae_vs_state": 0.08394285679484408,
+          "best_lag_to_action": {
+            "lag": -3,
+            "corr": 0.9843219199424464
+          },
+          "best_lag_to_state": {
+            "lag": 4,
+            "corr": 0.9803478566621469
+          },
+          "action_range": [
+            -0.08859799057245255,
+            0.3264000117778778
+          ],
+          "pred_range": [
+            -0.12118169665336609,
+            0.33105355501174927
+          ]
+        },
+        "yaw": {
+          "mae_vs_action": 0.11401774628611747,
+          "mae_vs_state": 0.10996003243732654,
+          "best_lag_to_action": {
+            "lag": -3,
+            "corr": 0.9872546714131375
+          },
+          "best_lag_to_state": {
+            "lag": 5,
+            "corr": 0.9847571771131369
+          },
+          "action_range": [
+            -0.009453903883695602,
+            0.6992846727371216
+          ],
+          "pred_range": [
+            0.15688839554786682,
+            0.6697007417678833
+          ]
+        }
+      }
+    },
+    "repaired_80k": {
+      "mae_vs_action_left_wrist3": 0.02987909255413494,
+      "mae_vs_state_left_wrist3": 0.04925676176418266,
+      "rmse_vs_action_left_wrist3": 0.04729900589443343,
+      "center_frame": {
+        "frame_index": 614,
+        "state_left_wrist3": [
+          -0.103094,
+          0.210028,
+          0.47165
+        ],
+        "action_left_wrist3": [
+          -0.008315,
+          -0.056162,
+          0.070022
+        ],
+        "pred_left_wrist3": [
+          -0.044023,
+          0.09706,
+          0.279574
+        ]
+      },
+      "per_dim": {
+        "roll": {
+          "mae_vs_action": 0.014070202472309272,
+          "mae_vs_state": 0.02107488866895437,
+          "best_lag_to_action": {
+            "lag": 0,
+            "corr": 0.994720694157399
+          },
+          "best_lag_to_state": {
+            "lag": 5,
+            "corr": 0.9917195420652711
+          },
+          "action_range": [
+            -0.22521980106830597,
+            0.06453575938940048
+          ],
+          "pred_range": [
+            -0.25419530272483826,
+            0.0711517482995987
+          ]
+        },
+        "pitch": {
+          "mae_vs_action": 0.0318286694586277,
+          "mae_vs_state": 0.0564406791391472,
+          "best_lag_to_action": {
+            "lag": -4,
+            "corr": 0.9948385817041991
+          },
+          "best_lag_to_state": {
+            "lag": 0,
+            "corr": 0.9909373313814559
+          },
+          "action_range": [
+            -0.08859799057245255,
+            0.3264000117778778
+          ],
+          "pred_range": [
+            -0.10497379302978516,
+            0.33694595098495483
+          ]
+        },
+        "yaw": {
+          "mae_vs_action": 0.04373840573146784,
+          "mae_vs_state": 0.0702547174844464,
+          "best_lag_to_action": {
+            "lag": -3,
+            "corr": 0.9899306919144172
+          },
+          "best_lag_to_state": {
+            "lag": 4,
+            "corr": 0.9862347607076122
+          },
+          "action_range": [
+            -0.009453903883695602,
+            0.6992846727371216
+          ],
+          "pred_range": [
+            -0.040500760078430176,
+            0.7628259062767029
+          ]
+        }
+      }
+    },
+    "action_fixed_60k": {
+      "mae_vs_action_left_wrist3": 0.07415707300695229,
+      "mae_vs_state_left_wrist3": 0.0696302801876704,
+      "rmse_vs_action_left_wrist3": 0.09551404317926324,
+      "center_frame": {
+        "frame_index": 614,
+        "state_left_wrist3": [
+          -0.103094,
+          0.210028,
+          0.47165
+        ],
+        "action_left_wrist3": [
+          -0.008315,
+          -0.056162,
+          0.070022
+        ],
+        "pred_left_wrist3": [
+          -0.080757,
+          0.055911,
+          0.334573
+        ]
+      },
+      "per_dim": {
+        "roll": {
+          "mae_vs_action": 0.07745891601468126,
+          "mae_vs_state": 0.056075146732230984,
+          "best_lag_to_action": {
+            "lag": 6,
+            "corr": 0.9872573620306613
+          },
+          "best_lag_to_state": {
+            "lag": 9,
+            "corr": 0.9883992179808608
+          },
+          "action_range": [
+            -0.22521980106830597,
+            0.06453575938940048
+          ],
+          "pred_range": [
+            -0.28467291593551636,
+            -0.04648013412952423
+          ]
+        },
+        "pitch": {
+          "mae_vs_action": 0.0352135984847943,
+          "mae_vs_state": 0.04536607045059403,
+          "best_lag_to_action": {
+            "lag": 0,
+            "corr": 0.9848729174711276
+          },
+          "best_lag_to_state": {
+            "lag": 4,
+            "corr": 0.9829714108980596
+          },
+          "action_range": [
+            -0.08859799057245255,
+            0.3264000117778778
+          ],
+          "pred_range": [
+            -0.07358454167842865,
+            0.363211452960968
+          ]
+        },
+        "yaw": {
+          "mae_vs_action": 0.1097987045213813,
+          "mae_vs_state": 0.1074496233801862,
+          "best_lag_to_action": {
+            "lag": -3,
+            "corr": 0.984762363736795
+          },
+          "best_lag_to_state": {
+            "lag": 5,
+            "corr": 0.9841099063738853
+          },
+          "action_range": [
+            -0.009453903883695602,
+            0.6992846727371216
+          ],
+          "pred_range": [
+            0.14899122714996338,
+            0.6695625185966492
+          ]
+        }
+      }
+    }
+  }
+}

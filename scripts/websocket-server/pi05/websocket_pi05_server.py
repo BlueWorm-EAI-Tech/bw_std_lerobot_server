@@ -81,6 +81,8 @@ class PI05WebSocketServer:
         self.preprocessor = None
         self.postprocessor = None
         self.policy_config = None
+        self._runtime_to_policy_indices = None
+        self._policy_to_runtime_indices = None
 
         logger.info("Initializing PI05 WebSocket Server")
         logger.info(f"Model path: {model_path}")
@@ -104,11 +106,35 @@ class PI05WebSocketServer:
 
         # Load preprocessor and postprocessor
         device_override = {"device": self.device}
+        rename_map = {
+            "observation.images.env_cam": "observation.images.base",
+            "observation.images.left_wrist_cam": "observation.images.left_wrist",
+            "observation.images.right_wrist_cam": "observation.images.right_wrist",
+        }
+        relative_actions_enabled = bool(getattr(self.policy_config, "use_relative_actions", False))
+        relative_exclude_joints = list(getattr(self.policy_config, "relative_exclude_joints", []))
+        action_feature_names = list(getattr(self.policy_config, "action_feature_names", []))
+        self._configure_action_order_bridge(action_feature_names)
         self.preprocessor, self.postprocessor = make_pre_post_processors(
             self.policy_config,
             pretrained_path=self.model_path,
-            preprocessor_overrides={"device_processor": device_override},
-            postprocessor_overrides={"device_processor": device_override},
+            preprocessor_overrides={
+                "device_processor": device_override,
+                "rename_observations_processor": {"rename_map": rename_map},
+                "delta_actions_processor": {
+                    "enabled": relative_actions_enabled,
+                    "exclude_joints": relative_exclude_joints,
+                    "action_feature_names": action_feature_names,
+                },
+            },
+            postprocessor_overrides={
+                "device_processor": device_override,
+                "absolute_actions_processor": {
+                    "enabled": relative_actions_enabled,
+                    "exclude_joints": relative_exclude_joints,
+                    "action_feature_names": action_feature_names,
+                },
+            },
         )
 
         load_time = time.perf_counter() - start_time
@@ -118,6 +144,55 @@ class PI05WebSocketServer:
         logger.info(f"Image features: {self.policy_config.image_features}")
         logger.info(f"State feature: {self.policy_config.robot_state_feature}")
         logger.info(f"Action feature: {self.policy_config.action_feature}")
+
+    def _configure_action_order_bridge(self, action_feature_names: list[str]) -> None:
+        self._runtime_to_policy_indices = None
+        self._policy_to_runtime_indices = None
+
+        if not action_feature_names or len(action_feature_names) % 2 != 0:
+            return
+
+        half_dim = len(action_feature_names) // 2
+        first_half = [str(name).lower() for name in action_feature_names[:half_dim]]
+        second_half = [str(name).lower() for name in action_feature_names[half_dim:]]
+        if not first_half or not second_half:
+            return
+
+        if all(name.startswith("right_") for name in first_half) and all(
+            name.startswith("left_") for name in second_half
+        ):
+            # The folding_final checkpoint stores bimanual state/action as right-arm block
+            # followed by left-arm block, while the Mantis runtime uses left-first order.
+            swap_indices = list(range(half_dim, len(action_feature_names))) + list(range(0, half_dim))
+            self._runtime_to_policy_indices = swap_indices
+            self._policy_to_runtime_indices = swap_indices
+            logger.info(
+                "Enabled Mantis joint-order bridge: runtime state/action left-first <-> policy right-first"
+            )
+
+    def _reorder_runtime_state_to_policy(self, state: torch.Tensor | None) -> torch.Tensor | None:
+        if state is None or self._runtime_to_policy_indices is None:
+            return state
+        if state.shape[-1] != len(self._runtime_to_policy_indices):
+            logger.warning(
+                "Skipping runtime->policy state reorder because state_dim=%s does not match expected_dim=%s",
+                state.shape[-1],
+                len(self._runtime_to_policy_indices),
+            )
+            return state
+        return state[..., self._runtime_to_policy_indices]
+
+    def _reorder_policy_action_to_runtime(self, action: torch.Tensor) -> torch.Tensor:
+        if self._policy_to_runtime_indices is None:
+            return action
+        if action.shape[-1] != len(self._policy_to_runtime_indices):
+            logger.warning(
+                "Skipping policy->runtime action reorder because action_dim=%s does not match expected_dim=%s",
+                action.shape[-1],
+                len(self._policy_to_runtime_indices),
+            )
+            return action
+        return action[..., self._policy_to_runtime_indices]
 
     def decode_base64_image(self, base64_str: str) -> torch.Tensor:
         """Decode base64 string to image tensor.
@@ -150,6 +225,13 @@ class PI05WebSocketServer:
 
         return image_tensor
 
+    def _set_postprocessor_reference_state(self, state: torch.Tensor | None) -> None:
+        if state is None or self.postprocessor is None:
+            return
+        for step in self.postprocessor.steps:
+            if hasattr(step, "set_reference_state"):
+                step.set_reference_state(state)
+
     def parse_observation(self, obs_data: dict[str, Any]) -> dict[str, torch.Tensor]:
         """Parse raw observation data into LeRobot format.
 
@@ -166,6 +248,7 @@ class PI05WebSocketServer:
             state = obs_data["observation.state"]
             if isinstance(state, list):
                 state = torch.tensor(state, dtype=torch.float32)
+            state = self._reorder_runtime_state_to_policy(state)
             observation["observation.state"] = state
 
         # Process images
@@ -226,6 +309,7 @@ class PI05WebSocketServer:
                     parse_start = time.perf_counter()
                     observation = self.parse_observation(request["observation"])
                     parse_time = time.perf_counter() - parse_start
+                    current_state = observation.get("observation.state")
 
                     # Add task to observation (PI05 requires task input)
                     if self.task:
@@ -253,6 +337,7 @@ class PI05WebSocketServer:
 
                     # Postprocess each action in chunk
                     postprocess_start = time.perf_counter()
+                    self._set_postprocessor_reference_state(current_state)
                     batch_size, chunk_size, action_dim = action_chunk.shape
 
                     processed_actions = []
@@ -263,6 +348,7 @@ class PI05WebSocketServer:
 
                     # Stack back and remove batch dimension
                     action_chunk = torch.stack(processed_actions, dim=1).squeeze(0)
+                    action_chunk = self._reorder_policy_action_to_runtime(action_chunk)
                     postprocess_time = time.perf_counter() - postprocess_start
 
                     # Convert to list for JSON serialization

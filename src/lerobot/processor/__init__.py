@@ -73,6 +73,7 @@ from .policy_robot_bridge import (
     PolicyActionToRobotActionProcessorStep,
     RobotActionToPolicyActionProcessorStep,
 )
+from .relative_action_processor import AbsoluteActionsProcessorStep, DeltaActionsProcessorStep
 from .rename_processor import RenameObservationsProcessorStep
 from .tokenizer_processor import ActionTokenizerProcessorStep, TokenizerProcessorStep
 
@@ -123,6 +124,8 @@ __all__ = [
     "Torch2NumpyActionProcessorStep",
     "RobotActionToPolicyActionProcessorStep",
     "PolicyActionToRobotActionProcessorStep",
+    "AbsoluteActionsProcessorStep",
+    "DeltaActionsProcessorStep",
     "transition_to_batch",
     "TransitionKey",
     "TruncatedProcessorStep",

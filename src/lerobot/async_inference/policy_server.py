@@ -379,6 +379,11 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
 
         # Stack back to (B, chunk_size, action_dim), then remove batch dim
         action_tensor = torch.stack(processed_actions, dim=1).squeeze(0)
+
+        # Temporary diagnostic swap for mantis shoulder roll/yaw channels.
+        action_tensor[..., [1, 2]] = action_tensor[..., [2, 1]]
+        action_tensor[..., [9, 10]] = action_tensor[..., [10, 9]]
+        self.logger.warning("Applied temporary action swap: dims 1<->2 and 9<->10")
         self.logger.debug(f"Postprocessed action shape: {action_tensor.shape}")
 
         """5. Convert to TimedAction list"""

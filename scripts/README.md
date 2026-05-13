@@ -26,6 +26,7 @@ WebSocket ACT 推理系统，包含 server、client、部署脚本和配置。
 | `recompute_all_stats.py` | 批量重算所有统计量 |
 | `fix_stats_preserve_images.py` | 修复统计量（保留图片） |
 | `analyze_dataset_gaps.py` | 分析 action/state 差距 |
+| `audit_mantis_dataset.py` | 检查 Mantis 数据格式、统计量和异常关节 |
 | `detailed_gap_analysis.py` | 详细差距分析 |
 | `inspect_shoulder_roll_actions.py` | 检查 shoulder roll 关节数据 |
 | `verify_stats_update.py` | 验证统计量更新 |
