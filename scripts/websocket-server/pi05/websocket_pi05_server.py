@@ -60,6 +60,7 @@ class PI05WebSocketServer:
         port: int = 8000,
         host: str = "0.0.0.0",
         task: str = None,
+        disable_joint_order_bridge: bool = False,
     ):
         """Initialize the PI05 WebSocket server.
 
@@ -75,6 +76,7 @@ class PI05WebSocketServer:
         self.port = port
         self.host = host
         self.task = task
+        self.disable_joint_order_bridge = disable_joint_order_bridge
 
         # Will be initialized in setup()
         self.policy = None
@@ -89,6 +91,7 @@ class PI05WebSocketServer:
         logger.info(f"Device: {device}")
         logger.info(f"Task: {task}")
         logger.info(f"Server will bind to {host}:{port}")
+        logger.info(f"Disable joint-order bridge: {disable_joint_order_bridge}")
 
     async def setup(self):
         """Load model and preprocessors."""
@@ -156,6 +159,10 @@ class PI05WebSocketServer:
         first_half = [str(name).lower() for name in action_feature_names[:half_dim]]
         second_half = [str(name).lower() for name in action_feature_names[half_dim:]]
         if not first_half or not second_half:
+            return
+
+        if self.disable_joint_order_bridge:
+            logger.info("Mantis joint-order bridge disabled by CLI flag")
             return
 
         if all(name.startswith("right_") for name in first_half) and all(
@@ -465,6 +472,11 @@ def main():
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level (default: INFO)"
     )
+    parser.add_argument(
+        "--disable_joint_order_bridge",
+        action="store_true",
+        help="Disable automatic right-first <-> left-first joint order bridge",
+    )
 
     args = parser.parse_args()
 
@@ -478,6 +490,7 @@ def main():
         port=args.port,
         host=args.host,
         task=args.task,
+        disable_joint_order_bridge=args.disable_joint_order_bridge,
     )
 
     try:
