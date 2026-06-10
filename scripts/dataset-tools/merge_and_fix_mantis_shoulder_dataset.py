@@ -279,6 +279,7 @@ def create_merged_fixed_dataset(
     video_files_size_in_mb = math.ceil(video_bytes / (1024 * 1024)) if video_bytes else 0
 
     merged_info = template_info
+    merged_info["repo_id"] = output_repo_id
     merged_info["total_episodes"] = len(dataset_paths)
     merged_info["total_frames"] = total_frames
     merged_info["total_tasks"] = 1

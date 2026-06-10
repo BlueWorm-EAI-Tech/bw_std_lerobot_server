@@ -40,7 +40,9 @@ import torch
 import websockets
 from PIL import Image
 
+from lerobot.configs.types import RTCAttentionSchedule
 from lerobot.policies.factory import get_policy_class, make_pre_post_processors
+from lerobot.policies.rtc.configuration_rtc import RTCConfig
 
 # Configure logging
 logging.basicConfig(
@@ -61,6 +63,11 @@ class PI05WebSocketServer:
         host: str = "0.0.0.0",
         task: str = None,
         disable_joint_order_bridge: bool = False,
+        enable_rtc: bool = False,
+        rtc_execution_horizon: int = 10,
+        rtc_max_guidance_weight: float = 10.0,
+        rtc_prefix_attention_schedule: str = "EXP",
+        rtc_debug: bool = False,
     ):
         """Initialize the PI05 WebSocket server.
 
@@ -77,6 +84,11 @@ class PI05WebSocketServer:
         self.host = host
         self.task = task
         self.disable_joint_order_bridge = disable_joint_order_bridge
+        self.enable_rtc = enable_rtc
+        self.rtc_execution_horizon = rtc_execution_horizon
+        self.rtc_max_guidance_weight = rtc_max_guidance_weight
+        self.rtc_prefix_attention_schedule = rtc_prefix_attention_schedule
+        self.rtc_debug = rtc_debug
 
         # Will be initialized in setup()
         self.policy = None
@@ -92,6 +104,7 @@ class PI05WebSocketServer:
         logger.info(f"Task: {task}")
         logger.info(f"Server will bind to {host}:{port}")
         logger.info(f"Disable joint-order bridge: {disable_joint_order_bridge}")
+        logger.info(f"RTC enabled: {enable_rtc}")
 
     async def setup(self):
         """Load model and preprocessors."""
@@ -101,6 +114,25 @@ class PI05WebSocketServer:
         # Load policy
         policy_class = get_policy_class("pi05")
         self.policy = policy_class.from_pretrained(self.model_path)
+        if self.enable_rtc:
+            schedule_name = str(self.rtc_prefix_attention_schedule).upper()
+            rtc_schedule = RTCAttentionSchedule[schedule_name]
+            self.policy.config.rtc_config = RTCConfig(
+                enabled=True,
+                execution_horizon=int(self.rtc_execution_horizon),
+                max_guidance_weight=float(self.rtc_max_guidance_weight),
+                prefix_attention_schedule=rtc_schedule,
+                debug=bool(self.rtc_debug),
+            )
+            self.policy.init_rtc_processor()
+            logger.info(
+                "Enabled PI05 RTC: execution_horizon=%d max_guidance_weight=%.3f "
+                "prefix_attention_schedule=%s debug=%s",
+                self.rtc_execution_horizon,
+                self.rtc_max_guidance_weight,
+                rtc_schedule.value,
+                self.rtc_debug,
+            )
         self.policy.to(self.device)
         self.policy.eval()
 
@@ -273,7 +305,13 @@ class PI05WebSocketServer:
         return observation
 
     @torch.no_grad()
-    def predict_action_chunk(self, observation: dict[str, torch.Tensor]) -> torch.Tensor:
+    def predict_action_chunk(
+        self,
+        observation: dict[str, torch.Tensor],
+        *,
+        inference_delay: int | None = None,
+        prev_chunk_left_over: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """Run inference to get action chunk.
 
         Args:
@@ -282,8 +320,13 @@ class PI05WebSocketServer:
         Returns:
             Action chunk tensor of shape (chunk_size, action_dim)
         """
-        # Get action chunk from policy
-        action_chunk = self.policy.predict_action_chunk(observation)
+        policy_kwargs = {}
+        if self.enable_rtc and inference_delay is not None:
+            policy_kwargs["inference_delay"] = int(inference_delay)
+            if prev_chunk_left_over is not None:
+                policy_kwargs["prev_chunk_left_over"] = prev_chunk_left_over
+
+        action_chunk = self.policy.predict_action_chunk(observation, **policy_kwargs)
 
         # Ensure correct shape (batch_size, chunk_size, action_dim)
         if action_chunk.ndim != 3:
@@ -299,6 +342,7 @@ class PI05WebSocketServer:
         """
         client_id = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
         logger.info(f"Client connected: {client_id}")
+        last_raw_action_chunk: torch.Tensor | None = None
 
         try:
             async for message in websocket:
@@ -306,6 +350,8 @@ class PI05WebSocketServer:
                     # Parse request
                     request = json.loads(message)
                     timestep = request.get("timestep", 0)
+                    if request.get("reset", False):
+                        last_raw_action_chunk = None
 
                     logger.debug(f"Received request from {client_id}, timestep={timestep}")
 
@@ -337,19 +383,40 @@ class PI05WebSocketServer:
                         logger.error(f"Preprocessing error for {client_id}: {preprocess_error}", exc_info=True)
                         continue
 
+                    rtc_request = request.get("rtc") if isinstance(request.get("rtc"), dict) else {}
+                    request_rtc = bool(rtc_request.get("enabled", False))
+                    use_rtc = bool(self.enable_rtc and request_rtc)
+                    inference_delay = max(int(rtc_request.get("inference_delay", 0)), 0)
+                    action_index_before_inference = max(
+                        int(rtc_request.get("action_index_before_inference", 0)), 0
+                    )
+                    prev_chunk_left_over = None
+                    prev_chunk_left_over_len = 0
+                    if use_rtc and last_raw_action_chunk is not None:
+                        chunk_size = int(last_raw_action_chunk.shape[1])
+                        start_index = min(action_index_before_inference, chunk_size)
+                        if start_index < chunk_size:
+                            prev_chunk_left_over = last_raw_action_chunk[:, start_index:, :].detach()
+                            prev_chunk_left_over_len = int(prev_chunk_left_over.shape[1])
+
                     # Run inference
                     inference_start = time.perf_counter()
-                    action_chunk = self.predict_action_chunk(observation)
+                    raw_action_chunk = self.predict_action_chunk(
+                        observation,
+                        inference_delay=inference_delay if use_rtc else None,
+                        prev_chunk_left_over=prev_chunk_left_over if use_rtc else None,
+                    )
                     inference_time = time.perf_counter() - inference_start
+                    last_raw_action_chunk = raw_action_chunk.detach().clone()
 
                     # Postprocess each action in chunk
                     postprocess_start = time.perf_counter()
                     self._set_postprocessor_reference_state(current_state)
-                    batch_size, chunk_size, action_dim = action_chunk.shape
+                    batch_size, chunk_size, action_dim = raw_action_chunk.shape
 
                     processed_actions = []
                     for i in range(chunk_size):
-                        single_action = action_chunk[:, i, :]
+                        single_action = raw_action_chunk[:, i, :]
                         processed_action = self.postprocessor(single_action)
                         processed_actions.append(processed_action)
 
@@ -370,6 +437,14 @@ class PI05WebSocketServer:
                         "inference_time_ms": total_time * 1000,
                         "chunk_size": len(action_list),
                         "action_dim": len(action_list[0]) if action_list else 0,
+                        "rtc": {
+                            "server_enabled": bool(self.enable_rtc),
+                            "request_enabled": request_rtc,
+                            "applied": use_rtc,
+                            "inference_delay": inference_delay,
+                            "action_index_before_inference": action_index_before_inference,
+                            "prev_chunk_left_over_len": prev_chunk_left_over_len,
+                        },
                         "timing": {
                             "parse_ms": parse_time * 1000,
                             "preprocess_ms": preprocess_time * 1000,
@@ -383,7 +458,8 @@ class PI05WebSocketServer:
                     await websocket.send(json.dumps(response))
 
                     logger.info(f"Processed request from {client_id}, timestep={timestep}, "
-                               f"time={total_time*1000:.2f}ms, chunk_size={len(action_list)}")
+                               f"time={total_time*1000:.2f}ms, chunk_size={len(action_list)}, "
+                               f"rtc_applied={use_rtc}, rtc_prev_left={prev_chunk_left_over_len}")
 
                 except json.JSONDecodeError as e:
                     error_response = {
@@ -477,6 +553,35 @@ def main():
         action="store_true",
         help="Disable automatic right-first <-> left-first joint order bridge",
     )
+    parser.add_argument(
+        "--enable_rtc",
+        action="store_true",
+        help="Enable PI05 Real-Time Chunking guidance when the client sends RTC metadata",
+    )
+    parser.add_argument(
+        "--rtc_execution_horizon",
+        type=int,
+        default=10,
+        help="RTC execution horizon used for prefix guidance (default: 10)",
+    )
+    parser.add_argument(
+        "--rtc_max_guidance_weight",
+        type=float,
+        default=10.0,
+        help="RTC max guidance weight (default: 10.0)",
+    )
+    parser.add_argument(
+        "--rtc_prefix_attention_schedule",
+        type=str,
+        default="EXP",
+        choices=["ZEROS", "ONES", "LINEAR", "EXP"],
+        help="RTC prefix attention schedule (default: EXP)",
+    )
+    parser.add_argument(
+        "--rtc_debug",
+        action="store_true",
+        help="Enable RTC debug tracking inside the policy",
+    )
 
     args = parser.parse_args()
 
@@ -491,6 +596,11 @@ def main():
         host=args.host,
         task=args.task,
         disable_joint_order_bridge=args.disable_joint_order_bridge,
+        enable_rtc=args.enable_rtc,
+        rtc_execution_horizon=args.rtc_execution_horizon,
+        rtc_max_guidance_weight=args.rtc_max_guidance_weight,
+        rtc_prefix_attention_schedule=args.rtc_prefix_attention_schedule,
+        rtc_debug=args.rtc_debug,
     )
 
     try:
