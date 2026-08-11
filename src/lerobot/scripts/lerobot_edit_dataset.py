@@ -103,6 +103,7 @@ from lerobot.configs import parser
 from lerobot.datasets.dataset_tools import (
     delete_episodes,
     merge_datasets,
+    recompute_stats,
     remove_feature,
     split_dataset,
 )
@@ -151,9 +152,26 @@ class ConvertToVideoConfig:
 
 
 @dataclass
+class RecomputeStatsConfig:
+    type: str = "recompute_stats"
+    skip_image_video: bool = True
+    relative_action: bool = False
+    relative_exclude_joints: list[str] | None = None
+    chunk_size: int = 50
+    num_workers: int = 0
+
+
+@dataclass
 class EditDatasetConfig:
     repo_id: str
-    operation: DeleteEpisodesConfig | SplitConfig | MergeConfig | RemoveFeatureConfig | ConvertToVideoConfig
+    operation: (
+        DeleteEpisodesConfig
+        | SplitConfig
+        | MergeConfig
+        | RemoveFeatureConfig
+        | ConvertToVideoConfig
+        | RecomputeStatsConfig
+    )
     root: str | None = None
     new_repo_id: str | None = None
     push_to_hub: bool = False
@@ -706,6 +724,23 @@ def handle_convert_to_video(cfg: EditDatasetConfig) -> None:
         logging.info("Dataset saved locally (not pushed to hub)")
 
 
+def handle_recompute_stats(cfg: EditDatasetConfig) -> None:
+    if not isinstance(cfg.operation, RecomputeStatsConfig):
+        raise ValueError("Operation config must be RecomputeStatsConfig")
+
+    dataset = LeRobotDataset(cfg.repo_id, root=cfg.root)
+    recompute_stats(
+        dataset,
+        skip_image_video=cfg.operation.skip_image_video,
+        relative_action=cfg.operation.relative_action,
+        relative_exclude_joints=cfg.operation.relative_exclude_joints,
+        chunk_size=cfg.operation.chunk_size,
+        num_workers=cfg.operation.num_workers,
+    )
+    if cfg.push_to_hub:
+        dataset.push_to_hub()
+
+
 @parser.wrap()
 def edit_dataset(cfg: EditDatasetConfig) -> None:
     operation_type = cfg.operation.type
@@ -720,10 +755,13 @@ def edit_dataset(cfg: EditDatasetConfig) -> None:
         handle_remove_feature(cfg)
     elif operation_type == "convert_to_video":
         handle_convert_to_video(cfg)
+    elif operation_type == "recompute_stats":
+        handle_recompute_stats(cfg)
     else:
         raise ValueError(
             f"Unknown operation type: {operation_type}\n"
-            f"Available operations: delete_episodes, split, merge, remove_feature, convert_to_video"
+            "Available operations: delete_episodes, split, merge, remove_feature, "
+            "convert_to_video, recompute_stats"
         )
 
 

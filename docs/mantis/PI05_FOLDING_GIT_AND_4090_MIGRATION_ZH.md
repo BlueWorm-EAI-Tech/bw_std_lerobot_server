@@ -24,7 +24,7 @@ GitHub -> git fetch/pull -> 本地历史和工作区
 release/pi05-folding-portable-20260811
 ```
 
-它基于已经验证动作帧处理的 commit `50fa1630`，不包含当前工作区里后续的积木任务、phase-progress 和相对动作实验。
+它基于已经验证动作帧处理的 commit `50fa1630`，并在后续提交中纳入了当前开发目录的实验代码，包括数据质量分层、PI05 优化/phase-progress 服务、相对动作处理、ACT loss 权重和配套测试。这些实验代码用于继续开发和复现；新机器首次部署仍默认使用 `deploy/mantis_pi05_folding/run_server.sh`，保持 `--disable_joint_order_bridge`，不要在服务端额外交换或翻转肩关节动作。
 
 ## 2. 本项目必须拆开的三类资产
 

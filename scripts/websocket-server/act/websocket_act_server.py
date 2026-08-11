@@ -50,6 +50,13 @@ logging.basicConfig(
 logger = logging.getLogger("websocket_act_server")
 
 
+LEGACY_TO_CANONICAL_IMAGE_KEYS = {
+    "observation.images.base": "observation.images.env_cam",
+    "observation.images.left_wrist": "observation.images.left_wrist_cam",
+    "observation.images.right_wrist": "observation.images.right_wrist_cam",
+}
+
+
 class ACTWebSocketServer:
     """WebSocket server for ACT model inference."""
 
@@ -115,6 +122,56 @@ class ACTWebSocketServer:
         logger.info(f"State feature: {self.policy_config.robot_state_feature}")
         logger.info(f"Action feature: {self.policy_config.action_feature}")
 
+    def expected_image_keys(self) -> set[str]:
+        """Return image keys expected by the loaded checkpoint."""
+        if self.policy_config is None:
+            return set()
+
+        image_features = getattr(self.policy_config, "image_features", None)
+        if image_features is None:
+            return set()
+        if isinstance(image_features, dict):
+            return set(image_features.keys())
+        return set(image_features)
+
+    def normalize_image_key(self, key: str) -> str:
+        """Map known legacy Mantis image keys to canonical checkpoint keys."""
+        canonical_key = LEGACY_TO_CANONICAL_IMAGE_KEYS.get(key)
+        if canonical_key is None:
+            return key
+
+        expected = self.expected_image_keys()
+        if not expected or canonical_key in expected or key not in expected:
+            logger.warning("Renaming legacy image key %s -> %s", key, canonical_key)
+            return canonical_key
+        return key
+
+    def validate_image_keys(self, observation: dict[str, torch.Tensor]) -> None:
+        """Fail fast with an actionable message when request keys do not match the checkpoint."""
+        expected = self.expected_image_keys()
+        if not expected:
+            return
+
+        received = {key for key in observation if key.startswith("observation.images.")}
+        missing = sorted(expected - received)
+        if not missing:
+            return
+
+        rename_hint = {
+            old_key: new_key
+            for old_key, new_key in LEGACY_TO_CANONICAL_IMAGE_KEYS.items()
+            if old_key in received or new_key in expected
+        }
+        raise KeyError(
+            "ACT image key mismatch before preprocessing. "
+            f"checkpoint_expected={sorted(expected)} "
+            f"request_batch_keys={sorted(received)} "
+            f"missing={missing} "
+            f"legacy_to_canonical_rename_map={rename_hint}. "
+            "Required image keys come from the loaded checkpoint's image_features; "
+            "send every key listed in checkpoint_expected. Do not rely on a fixed camera list."
+        )
+
     def decode_base64_image(self, base64_str: str) -> torch.Tensor:
         """Decode base64 string to image tensor.
 
@@ -174,12 +231,13 @@ class ACTWebSocketServer:
         # Process images
         for key, value in obs_data.items():
             if key.startswith("observation.images."):
+                image_key = self.normalize_image_key(key)
                 # Decode base64 image
                 if isinstance(value, str):
                     image_tensor = self.decode_base64_image(value)
-                    observation[key] = image_tensor
+                    observation[image_key] = image_tensor
                 elif isinstance(value, torch.Tensor):
-                    observation[key] = value
+                    observation[image_key] = value
                 else:
                     raise ValueError(f"Unsupported image format for {key}: {type(value)}")
 
@@ -228,6 +286,7 @@ class ACTWebSocketServer:
                     # Parse observation
                     parse_start = time.perf_counter()
                     observation = self.parse_observation(request["observation"])
+                    self.validate_image_keys(observation)
                     parse_time = time.perf_counter() - parse_start
 
                     # Preprocess

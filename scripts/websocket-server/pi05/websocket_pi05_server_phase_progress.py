@@ -6,7 +6,7 @@ This server loads a trained PI05 model and serves predictions via WebSocket.
 It accepts raw observations (including base64-encoded images) and returns action chunks.
 
 Usage:
-    python websocket_pi05_server.py --port 8000 --model_path /path/to/model --task "pick up the red block..."
+    python websocket_pi05_server_phase_progress.py --port 8000 --model_path /path/to/model
 
 Example client request:
     {
@@ -14,7 +14,7 @@ Example client request:
             "observation.state": [0.1, 0.2, ...],
             "observation.images.front": "base64_encoded_image_data",
         },
-        "task": "pick up the red block...",
+        "task": "Put the red block into plastic box 1, ... Phase: approach. ...",
     }
 
 Example server response:
@@ -50,7 +50,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("websocket_pi05_server")
+logger = logging.getLogger("websocket_pi05_server_phase_progress")
 
 
 LEGACY_TO_CANONICAL_IMAGE_KEYS = {
@@ -149,7 +149,7 @@ class PI05WebSocketServer:
 
         # Load preprocessor and postprocessor
         device_override = {"device": self.device}
-        rename_map = self.preprocessor_image_rename_map()
+        rename_map = LEGACY_TO_CANONICAL_IMAGE_KEYS
         relative_actions_enabled = bool(getattr(self.policy_config, "use_relative_actions", False))
         relative_exclude_joints = list(getattr(self.policy_config, "relative_exclude_joints", []))
         action_feature_names = list(getattr(self.policy_config, "action_feature_names", []))
@@ -211,17 +211,6 @@ class PI05WebSocketServer:
             return set(image_features.keys())
         return set(image_features)
 
-    def preprocessor_image_rename_map(self) -> dict[str, str]:
-        """Rename legacy keys only when the checkpoint expects their canonical names."""
-        expected = self.expected_image_keys()
-        if not expected:
-            return dict(LEGACY_TO_CANONICAL_IMAGE_KEYS)
-        return {
-            old_key: new_key
-            for old_key, new_key in LEGACY_TO_CANONICAL_IMAGE_KEYS.items()
-            if old_key not in expected and new_key in expected
-        }
-
     def normalize_image_key(self, key: str) -> str:
         """Map known legacy Mantis image keys to canonical checkpoint keys."""
         canonical_key = LEGACY_TO_CANONICAL_IMAGE_KEYS.get(key)
@@ -256,8 +245,10 @@ class PI05WebSocketServer:
             f"batch_image_keys={sorted(received)} "
             f"missing={missing} "
             f"legacy_to_canonical_rename_map={rename_hint}. "
-            "Required image keys come from the loaded checkpoint's image_features; "
-            "send every key listed in checkpoint_expected. Do not rely on a fixed camera list."
+            "For Mantis canonical checkpoints, keep request/batch keys as "
+            "observation.images.env_cam, observation.images.left_wrist_cam, "
+            "observation.images.right_wrist_cam. Do not rename them to "
+            "observation.images.base/left_wrist/right_wrist on the server."
         )
 
     def _saved_processor_step_names(self, filename: str) -> set[str]:
@@ -462,9 +453,17 @@ class PI05WebSocketServer:
                     parse_time = time.perf_counter() - parse_start
                     current_state = observation.get("observation.state")
 
-                    # Add task to observation (PI05 requires task input)
-                    if self.task:
+                    # Add task to observation (PI05 requires task input).  The phase-progress
+                    # client sends a dynamic task per request; --task remains a fallback for
+                    # smoke tests or fixed-prompt clients.
+                    request_task = request.get("task")
+                    task_source = "missing"
+                    if isinstance(request_task, str) and request_task.strip():
+                        observation["task"] = request_task.strip()
+                        task_source = "request"
+                    elif self.task:
                         observation["task"] = self.task
+                        task_source = "server_default"
 
                     # Preprocess (with debug logging)
                     preprocess_start = time.perf_counter()
@@ -536,6 +535,7 @@ class PI05WebSocketServer:
                         "inference_time_ms": total_time * 1000,
                         "chunk_size": len(action_list),
                         "action_dim": len(action_list[0]) if action_list else 0,
+                        "task_source": task_source,
                         "rtc": {
                             "server_enabled": bool(self.enable_rtc),
                             "request_enabled": request_rtc,

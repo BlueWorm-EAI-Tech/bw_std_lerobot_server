@@ -148,6 +148,73 @@ def update_policy(
     return train_metrics, output_dict
 
 
+def _ensure_trailing_period(text: str) -> str:
+    text = text.strip()
+    if not text:
+        return text
+    if text.endswith((".", "!", "?")):
+        return text
+    return f"{text}."
+
+
+def _strip_pi05_phase_progress_prompt(task: Any, mode: str) -> str:
+    task_text = " ".join(str(task).replace("\n", " ").split())
+
+    if mode == "long_task":
+        if " Current step:" in task_text:
+            task_text = task_text.split(" Current step:", 1)[0]
+        return _ensure_trailing_period(task_text)
+
+    if mode == "current_step_only":
+        if " Phase:" in task_text:
+            task_text = task_text.split(" Phase:", 1)[0]
+        return _ensure_trailing_period(task_text)
+
+    raise ValueError(f"Unsupported prompt_dropout_mode: {mode}")
+
+
+def _apply_pi05_prompt_dropout(batch: Any, policy_cfg: Any) -> tuple[Any, dict[str, float]]:
+    prob = float(getattr(policy_cfg, "prompt_dropout_prob", 0.0))
+    stats = {"prompt_dropout_count": 0.0, "prompt_dropout_frac": 0.0}
+    if prob <= 0.0 or not isinstance(batch, dict) or "task" not in batch:
+        return batch, stats
+
+    mode = getattr(policy_cfg, "prompt_dropout_mode", "mixed")
+    tasks = batch["task"]
+    if isinstance(tasks, str):
+        task_list = [tasks]
+        single_task = True
+    elif isinstance(tasks, (list, tuple)):
+        task_list = list(tasks)
+        single_task = False
+    else:
+        return batch, stats
+
+    if not task_list:
+        return batch, stats
+
+    new_tasks = []
+    dropped = 0
+    for task in task_list:
+        if torch.rand(()).item() < prob:
+            chosen_mode = mode
+            if chosen_mode == "mixed":
+                chosen_mode = "long_task" if torch.rand(()).item() < 0.5 else "current_step_only"
+            new_tasks.append(_strip_pi05_phase_progress_prompt(task, chosen_mode))
+            dropped += 1
+        else:
+            new_tasks.append(task)
+
+    if dropped == 0:
+        return batch, stats
+
+    new_batch = batch.copy()
+    new_batch["task"] = new_tasks[0] if single_task else new_tasks
+    stats["prompt_dropout_count"] = float(dropped)
+    stats["prompt_dropout_frac"] = float(dropped / len(task_list))
+    return new_batch, stats
+
+
 @parser.wrap()
 def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     """
@@ -247,10 +314,23 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     # Wait for all processes to finish policy creation before continuing
     accelerator.wait_for_everyone()
 
+    processor_pretrained_path = cfg.policy.pretrained_path
+    if (
+        getattr(cfg.policy, "use_relative_actions", False)
+        and processor_pretrained_path is not None
+        and not cfg.resume
+    ):
+        logging.warning(
+            "Relative actions are enabled while loading pretrained weights. "
+            "Building processors from the current PI05 config so an absolute-action base "
+            "checkpoint cannot silently bypass the relative/absolute transforms."
+        )
+        processor_pretrained_path = None
+
     # Create processors - only provide dataset_stats if not resuming from saved processors
     processor_kwargs = {}
     postprocessor_kwargs = {}
-    if (cfg.policy.pretrained_path and not cfg.resume) or not cfg.policy.pretrained_path:
+    if (processor_pretrained_path and not cfg.resume) or not processor_pretrained_path:
         # Only provide dataset_stats when not resuming from saved processor state
         processor_kwargs["dataset_stats"] = dataset.meta.stats
 
@@ -258,7 +338,7 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     if cfg.policy.type == "sarm":
         processor_kwargs["dataset_meta"] = dataset.meta
 
-    if cfg.policy.pretrained_path is not None:
+    if processor_pretrained_path is not None:
         processor_kwargs["preprocessor_overrides"] = {
             "device_processor": {"device": device.type},
             "normalizer_processor": {
@@ -280,7 +360,7 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
 
     preprocessor, postprocessor = make_pre_post_processors(
         policy_cfg=cfg.policy,
-        pretrained_path=cfg.policy.pretrained_path,
+        pretrained_path=processor_pretrained_path,
         **processor_kwargs,
         **postprocessor_kwargs,
     )
@@ -394,10 +474,18 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         logging.info(
             f"Start offline training on a fixed dataset, with effective batch size: {effective_batch_size}"
         )
+        prompt_dropout_prob = float(getattr(cfg.policy, "prompt_dropout_prob", 0.0))
+        if prompt_dropout_prob > 0.0:
+            logging.info(
+                "PI05 prompt dropout enabled: prob=%s mode=%s",
+                prompt_dropout_prob,
+                getattr(cfg.policy, "prompt_dropout_mode", "mixed"),
+            )
 
     for _ in range(step, cfg.steps):
         start_time = time.perf_counter()
         batch = next(dl_iter)
+        batch, prompt_dropout_stats = _apply_pi05_prompt_dropout(batch, cfg.policy)
         batch = preprocessor(batch)
         train_tracker.dataloading_s = time.perf_counter() - start_time
 
@@ -411,6 +499,8 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
             lr_scheduler=lr_scheduler,
             rabc_weights_provider=rabc_weights,
         )
+        if prompt_dropout_stats["prompt_dropout_count"] > 0:
+            output_dict.update(prompt_dropout_stats)
 
         # Note: eval and checkpoint happens *after* the `step`th training update has completed, so we
         # increment `step` here.

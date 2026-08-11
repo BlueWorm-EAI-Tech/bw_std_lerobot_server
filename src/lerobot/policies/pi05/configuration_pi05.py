@@ -63,12 +63,15 @@ class PI05Config(PreTrainedConfig):
 
     tokenizer_max_length: int = 200  # see openpi `__post_init__`
     text_tokenizer_name: str = "google/paligemma-3b-pt-224"  # 可配置的tokenizer名称
+    prompt_dropout_prob: float = 0.0
+    prompt_dropout_mode: str = "mixed"  # long_task, current_step_only, or mixed
+    action_loss_weights: list[float] = field(default_factory=list)
+    action_loss_weights_normalize: bool = True
 
-    # Compatibility fields carried by some folding-line checkpoints.
-    # The actual relative/absolute action transform is implemented in the saved
-    # processor pipeline rather than consumed directly by this config class.
+    # Relative action processing is opt-in. Gripper dimensions remain absolute
+    # when it is enabled, matching the folding checkpoint convention.
     use_relative_actions: bool = False
-    relative_exclude_joints: list[str] = field(default_factory=list)
+    relative_exclude_joints: list[str] = field(default_factory=lambda: ["gripper"])
     action_feature_names: list[str] = field(default_factory=list)
 
     normalization_mapping: dict[str, NormalizationMode] = field(
@@ -122,6 +125,22 @@ class PI05Config(PreTrainedConfig):
 
         if self.dtype not in ["bfloat16", "float32"]:
             raise ValueError(f"Invalid dtype: {self.dtype}")
+
+        if not 0.0 <= self.prompt_dropout_prob <= 1.0:
+            raise ValueError(f"prompt_dropout_prob must be between 0 and 1, got {self.prompt_dropout_prob}")
+
+        valid_prompt_dropout_modes = {"long_task", "current_step_only", "mixed"}
+        if self.prompt_dropout_mode not in valid_prompt_dropout_modes:
+            raise ValueError(
+                "prompt_dropout_mode must be one of "
+                f"{sorted(valid_prompt_dropout_modes)}, got {self.prompt_dropout_mode}"
+            )
+
+        if any(weight < 0.0 for weight in self.action_loss_weights):
+            raise ValueError("action_loss_weights must be non-negative")
+
+        if self.action_loss_weights and not any(weight > 0.0 for weight in self.action_loss_weights):
+            raise ValueError("At least one action_loss_weights value must be greater than 0")
 
     def validate_features(self) -> None:
         """Validate and set up input/output features."""

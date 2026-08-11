@@ -133,6 +133,24 @@ class ACTPolicy(PreTrainedPolicy):
         actions = self.model(batch)[0]
         return actions
 
+    def _get_action_loss_weights(self, losses: Tensor) -> Tensor | None:
+        weights = self.config.action_loss_weights
+        if not weights:
+            return None
+
+        action_dim = losses.shape[-1]
+        if len(weights) != action_dim:
+            raise ValueError(
+                "action_loss_weights length must match the action dimension: "
+                f"got {len(weights)} weights for action_dim={action_dim}"
+            )
+
+        weights_tensor = torch.as_tensor(weights, dtype=losses.dtype, device=losses.device)
+        if self.config.action_loss_weights_normalize:
+            weights_tensor = weights_tensor * (action_dim / weights_tensor.sum())
+
+        return weights_tensor.view(1, 1, action_dim)
+
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict]:
         """Run the batch through the model and compute the loss for training or validation."""
         if self.config.image_features:
@@ -141,11 +159,21 @@ class ACTPolicy(PreTrainedPolicy):
 
         actions_hat, (mu_hat, log_sigma_x2_hat) = self.model(batch)
 
-        l1_loss = (
-            F.l1_loss(batch[ACTION], actions_hat, reduction="none") * ~batch["action_is_pad"].unsqueeze(-1)
-        ).mean()
+        l1_losses = F.l1_loss(batch[ACTION], actions_hat, reduction="none") * ~batch[
+            "action_is_pad"
+        ].unsqueeze(-1)
+        action_loss_weights = self._get_action_loss_weights(l1_losses)
+        weighted_l1_losses = l1_losses if action_loss_weights is None else l1_losses * action_loss_weights
+        l1_loss = weighted_l1_losses.mean()
 
         loss_dict = {"l1_loss": l1_loss.item()}
+        if action_loss_weights is not None:
+            loss_dict["unweighted_l1_loss"] = l1_losses.mean().item()
+            loss_dict["l1_loss_per_dim"] = l1_losses.mean(dim=(0, 1)).detach().cpu().tolist()
+            loss_dict["weighted_l1_loss_per_dim"] = (
+                weighted_l1_losses.mean(dim=(0, 1)).detach().cpu().tolist()
+            )
+            loss_dict["action_loss_weights"] = action_loss_weights.reshape(-1).detach().cpu().tolist()
         if self.config.use_vae:
             # Calculate Dₖₗ(latent_pdf || standard_normal). Note: After computing the KL-divergence for
             # each dimension independently, we sum over the latent dimension to get the total

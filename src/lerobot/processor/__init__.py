@@ -73,7 +73,11 @@ from .policy_robot_bridge import (
     PolicyActionToRobotActionProcessorStep,
     RobotActionToPolicyActionProcessorStep,
 )
-from .relative_action_processor import AbsoluteActionsProcessorStep, DeltaActionsProcessorStep
+from .relative_action_processor import (
+    AbsoluteActionsProcessorStep,
+    DeltaActionsProcessorStep,
+    RelativeActionsProcessorStep,
+)
 from .rename_processor import RenameObservationsProcessorStep
 from .tokenizer_processor import ActionTokenizerProcessorStep, TokenizerProcessorStep
 
@@ -126,6 +130,7 @@ __all__ = [
     "PolicyActionToRobotActionProcessorStep",
     "AbsoluteActionsProcessorStep",
     "DeltaActionsProcessorStep",
+    "RelativeActionsProcessorStep",
     "transition_to_batch",
     "TransitionKey",
     "TruncatedProcessorStep",

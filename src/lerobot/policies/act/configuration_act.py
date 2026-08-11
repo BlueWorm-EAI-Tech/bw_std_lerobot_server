@@ -88,6 +88,10 @@ class ACTConfig(PreTrainedConfig):
         dropout: Dropout to use in the transformer layers (see code for details).
         kl_weight: The weight to use for the KL-divergence component of the loss if the variational objective
             is enabled. Loss is then calculated as: `reconstruction_loss + kl_weight * kld_loss`.
+        action_loss_weights: Optional per-action-dimension weights applied to the L1 reconstruction loss.
+            An empty list keeps the original unweighted loss behavior.
+        action_loss_weights_normalize: Whether to normalize configured action loss weights to have mean 1,
+            preserving the overall L1 loss scale and its balance with the KL loss.
     """
 
     # Input / output structure.
@@ -131,6 +135,8 @@ class ACTConfig(PreTrainedConfig):
     # Training and loss computation.
     dropout: float = 0.1
     kl_weight: float = 10.0
+    action_loss_weights: list[float] = field(default_factory=list)
+    action_loss_weights_normalize: bool = True
 
     # Training preset
     optimizer_lr: float = 1e-5
@@ -159,6 +165,10 @@ class ACTConfig(PreTrainedConfig):
             raise ValueError(
                 f"Multiple observation steps not handled yet. Got `nobs_steps={self.n_obs_steps}`"
             )
+        if any(weight < 0.0 for weight in self.action_loss_weights):
+            raise ValueError("action_loss_weights must be non-negative")
+        if self.action_loss_weights and not any(weight > 0.0 for weight in self.action_loss_weights):
+            raise ValueError("At least one action_loss_weights value must be greater than 0")
 
     def get_optimizer_preset(self) -> AdamWConfig:
         return AdamWConfig(

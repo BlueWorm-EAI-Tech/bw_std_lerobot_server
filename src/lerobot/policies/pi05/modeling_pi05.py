@@ -1018,6 +1018,22 @@ class PI05Policy(PreTrainedPolicy):
             if remap_count > 0:
                 print(f"Remapped {remap_count} state dict keys")
 
+            # Some PI05/OpenPI checkpoints save the tied PaliGemma token embedding only
+            # under lm_head.weight. The HF module still expects the input embedding key.
+            paligemma_lm_head_key = "model.paligemma_with_expert.paligemma.lm_head.weight"
+            paligemma_embed_key = (
+                "model.paligemma_with_expert.paligemma.model.language_model.embed_tokens.weight"
+            )
+            if (
+                paligemma_embed_key not in remapped_state_dict
+                and paligemma_lm_head_key in remapped_state_dict
+            ):
+                remapped_state_dict[paligemma_embed_key] = remapped_state_dict[paligemma_lm_head_key]
+                print(
+                    "Aliased tied PaliGemma token embedding: "
+                    f"{paligemma_lm_head_key} -> {paligemma_embed_key}"
+                )
+
             # Load the remapped state dict into the model
             missing_keys, unexpected_keys = model.load_state_dict(remapped_state_dict, strict=strict)
 
@@ -1096,8 +1112,7 @@ class PI05Policy(PreTrainedPolicy):
 
             # Handle vision tower embedding layer potential differences
             if "patch_embedding" in key:
-                # Some checkpoints might have this, but current model expects different structure
-                logging.warning(f"Vision embedding key might need handling: {key}")
+                logging.debug("Loading vision patch embedding key: %s", key)
 
             fixed_state_dict[new_key] = value
 
@@ -1200,6 +1215,24 @@ class PI05Policy(PreTrainedPolicy):
         actions = pad_vector(batch[ACTION], self.config.max_action_dim)
         return actions
 
+    def _get_action_loss_weights(self, losses: Tensor) -> Tensor | None:
+        weights = self.config.action_loss_weights
+        if not weights:
+            return None
+
+        action_dim = losses.shape[-1]
+        if len(weights) != action_dim:
+            raise ValueError(
+                "action_loss_weights length must match the action dimension after padding is removed: "
+                f"got {len(weights)} weights for action_dim={action_dim}"
+            )
+
+        weights_tensor = torch.as_tensor(weights, dtype=losses.dtype, device=losses.device)
+        if self.config.action_loss_weights_normalize:
+            weights_tensor = weights_tensor * (action_dim / weights_tensor.sum())
+
+        return weights_tensor.view(1, 1, action_dim)
+
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
         """Select a single action given environment observations."""
@@ -1256,19 +1289,29 @@ class PI05Policy(PreTrainedPolicy):
         # Truncate losses to actual action dimensions
         original_action_dim = self.config.output_features[ACTION].shape[0]
         losses = losses[:, :, :original_action_dim]
+        action_loss_weights = self._get_action_loss_weights(losses)
+        weighted_losses = losses if action_loss_weights is None else losses * action_loss_weights
 
         loss_dict = {
             "loss_per_dim": losses.mean(dim=[0, 1]).detach().cpu().numpy().tolist(),
         }
+        if action_loss_weights is not None:
+            loss_dict["unweighted_loss"] = losses.mean().item()
+            loss_dict["weighted_loss_per_dim"] = (
+                weighted_losses.mean(dim=[0, 1]).detach().cpu().numpy().tolist()
+            )
+            loss_dict["action_loss_weights"] = (
+                action_loss_weights.reshape(-1).detach().cpu().numpy().tolist()
+            )
 
         if reduction == "none":
             # Return per-sample losses (B,) by averaging over time and action dims
-            per_sample_loss = losses.mean(dim=(1, 2))
+            per_sample_loss = weighted_losses.mean(dim=(1, 2))
             loss_dict["loss"] = per_sample_loss.mean().item()
             return per_sample_loss, loss_dict
         else:
             # Default: return scalar mean loss
-            loss = losses.mean()
+            loss = weighted_losses.mean()
             loss_dict["loss"] = loss.item()
             return loss, loss_dict
 

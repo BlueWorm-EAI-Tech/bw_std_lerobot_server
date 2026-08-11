@@ -22,7 +22,7 @@ from typing import Any
 import torch
 
 from lerobot.configs.types import PipelineFeatureType, PolicyFeature
-from lerobot.utils.constants import ACTION, OBS_STATE
+from lerobot.utils.constants import OBS_STATE
 
 from .core import EnvTransition, TransitionKey
 from .pipeline import ProcessorStep, ProcessorStepRegistry
@@ -31,7 +31,7 @@ from .pipeline import ProcessorStep, ProcessorStepRegistry
 def _infer_excluded_dims_from_names(
     action_dim: int,
     exclude_joints: list[str],
-    action_feature_names: list[str],
+    action_feature_names: list[str] | None,
 ) -> set[int]:
     if not exclude_joints:
         return set()
@@ -46,7 +46,11 @@ def _infer_excluded_dims_from_names(
 
     # Fallback for the common bimanual joint layout used by folding checkpoints:
     # the last joint in each arm block is the gripper.
-    if any(token.lower() == "gripper" for token in exclude_joints) and action_dim >= 8 and action_dim % 2 == 0:
+    if (
+        any(token.lower() == "gripper" for token in exclude_joints)
+        and action_dim >= 8
+        and action_dim % 2 == 0
+    ):
         arm_dim = action_dim // 2
         return {arm_dim - 1, action_dim - 1}
 
@@ -86,39 +90,64 @@ def _apply_relative_transform(
 
 
 @dataclass
+@ProcessorStepRegistry.register(name="relative_actions_processor")
 @ProcessorStepRegistry.register(name="delta_actions_processor")
 class DeltaActionsProcessorStep(ProcessorStep):
     enabled: bool = True
     exclude_joints: list[str] = field(default_factory=list)
+    action_names: list[str] | None = None
     action_feature_names: list[str] = field(default_factory=list)
+    _last_state: torch.Tensor | None = field(default=None, init=False, repr=False)
+
+    def _configured_action_names(self) -> list[str] | None:
+        if self.action_names is not None:
+            return self.action_names
+        return self.action_feature_names or None
+
+    def _build_mask(self, action_dim: int) -> list[bool]:
+        excluded = _infer_excluded_dims_from_names(
+            action_dim,
+            self.exclude_joints,
+            self._configured_action_names(),
+        )
+        return [idx not in excluded for idx in range(action_dim)]
 
     def get_config(self) -> dict[str, Any]:
-        return {
+        config = {
             "enabled": self.enabled,
             "exclude_joints": self.exclude_joints,
-            "action_feature_names": self.action_feature_names,
         }
+        if self.action_names is not None:
+            config["action_names"] = self.action_names
+        else:
+            config["action_feature_names"] = self.action_feature_names
+        return config
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
         self._current_transition = transition.copy()
         new_transition = self._current_transition
 
+        observation = new_transition.get(TransitionKey.OBSERVATION)
+        state = observation.get(OBS_STATE) if observation is not None else None
+        if state is not None:
+            self._last_state = torch.as_tensor(state)
+
         if not self.enabled:
             return new_transition
 
         action = new_transition.get(TransitionKey.ACTION)
-        observation = new_transition.get(TransitionKey.OBSERVATION)
-        if action is None or observation is None or OBS_STATE not in observation:
+        if action is None or state is None:
             return new_transition
 
         action_tensor = torch.as_tensor(action)
-        state_tensor = torch.as_tensor(observation[OBS_STATE], dtype=action_tensor.dtype, device=action_tensor.device)
-        excluded = _infer_excluded_dims_from_names(
-            action_tensor.shape[-1],
-            self.exclude_joints,
-            self.action_feature_names,
+        state_tensor = torch.as_tensor(
+            state,
+            dtype=action_tensor.dtype,
+            device=action_tensor.device,
         )
-        delta_dims = [idx for idx in range(action_tensor.shape[-1]) if idx not in excluded]
+        delta_dims = [
+            idx for idx, is_relative in enumerate(self._build_mask(action_tensor.shape[-1])) if is_relative
+        ]
         new_transition[TransitionKey.ACTION] = _apply_relative_transform(
             action_tensor,
             state_tensor,
@@ -138,15 +167,21 @@ class DeltaActionsProcessorStep(ProcessorStep):
 class AbsoluteActionsProcessorStep(ProcessorStep):
     enabled: bool = True
     exclude_joints: list[str] = field(default_factory=list)
+    action_names: list[str] | None = None
     action_feature_names: list[str] = field(default_factory=list)
+    relative_step: DeltaActionsProcessorStep | None = field(default=None, repr=False)
     _reference_state: torch.Tensor | None = field(default=None, init=False, repr=False)
 
     def get_config(self) -> dict[str, Any]:
-        return {
+        config = {
             "enabled": self.enabled,
             "exclude_joints": self.exclude_joints,
-            "action_feature_names": self.action_feature_names,
         }
+        if self.action_names is not None:
+            config["action_names"] = self.action_names
+        else:
+            config["action_feature_names"] = self.action_feature_names
+        return config
 
     def set_reference_state(self, state: torch.Tensor | list[float]) -> None:
         self._reference_state = torch.as_tensor(state)
@@ -166,17 +201,27 @@ class AbsoluteActionsProcessorStep(ProcessorStep):
         observation = new_transition.get(TransitionKey.OBSERVATION)
         if reference_state is None and observation is not None and OBS_STATE in observation:
             reference_state = torch.as_tensor(observation[OBS_STATE])
+        if reference_state is None and self.relative_step is not None:
+            reference_state = self.relative_step._last_state
         if reference_state is None:
-            return new_transition
+            raise RuntimeError(
+                "AbsoluteActionsProcessorStep needs the state used by the preprocessor. "
+                "Run the paired relative action preprocessor first or call set_reference_state()."
+            )
 
         action_tensor = torch.as_tensor(action)
         state_tensor = reference_state.to(dtype=action_tensor.dtype, device=action_tensor.device)
-        excluded = _infer_excluded_dims_from_names(
-            action_tensor.shape[-1],
-            self.exclude_joints,
-            self.action_feature_names,
-        )
-        delta_dims = [idx for idx in range(action_tensor.shape[-1]) if idx not in excluded]
+        if self.relative_step is not None:
+            mask = self.relative_step._build_mask(action_tensor.shape[-1])
+        else:
+            action_names = self.action_names if self.action_names is not None else self.action_feature_names
+            excluded = _infer_excluded_dims_from_names(
+                action_tensor.shape[-1],
+                self.exclude_joints,
+                action_names,
+            )
+            mask = [idx not in excluded for idx in range(action_tensor.shape[-1])]
+        delta_dims = [idx for idx, is_relative in enumerate(mask) if is_relative]
         new_transition[TransitionKey.ACTION] = _apply_relative_transform(
             action_tensor,
             state_tensor,
@@ -189,3 +234,8 @@ class AbsoluteActionsProcessorStep(ProcessorStep):
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         return features
+
+
+# Official LeRobot checkpoints use this public name. Keep the older Delta name
+# available so existing Mantis processor JSON files continue to deserialize.
+RelativeActionsProcessorStep = DeltaActionsProcessorStep

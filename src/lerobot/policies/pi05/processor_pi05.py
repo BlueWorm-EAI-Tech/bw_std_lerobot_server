@@ -25,6 +25,7 @@ from lerobot.configs.types import PipelineFeatureType, PolicyFeature
 from lerobot.policies.pi05.configuration_pi05 import PI05Config
 from lerobot.policies.pi05.modeling_pi05 import pad_vector
 from lerobot.processor import (
+    AbsoluteActionsProcessorStep,
     AddBatchDimensionProcessorStep,
     DeviceProcessorStep,
     NormalizerProcessorStep,
@@ -32,6 +33,7 @@ from lerobot.processor import (
     PolicyProcessorPipeline,
     ProcessorStep,
     ProcessorStepRegistry,
+    RelativeActionsProcessorStep,
     RenameObservationsProcessorStep,
     TokenizerProcessorStep,
     UnnormalizerProcessorStep,
@@ -178,12 +180,19 @@ def make_pi05_pre_post_processors(
         A tuple containing the configured pre-processor and post-processor pipelines.
     """
 
-    # Add remaining processors
+    relative_step = RelativeActionsProcessorStep(
+        enabled=config.use_relative_actions,
+        exclude_joints=config.relative_exclude_joints,
+        action_names=config.action_feature_names or None,
+    )
+
+    # Raw absolute action -> relative action -> normalize -> model.
     input_steps: list[ProcessorStep] = [
         RenameObservationsProcessorStep(rename_map={}),  # To mimic the same processor as pretrained one
         # Move task from top level to COMPLEMENTARY_DATA for PI05
         MoveTaskToComplementaryDataProcessorStep(),
         AddBatchDimensionProcessorStep(),
+        relative_step,
         # NOTE: NormalizerProcessorStep MUST come before Pi05PrepareStateTokenizerProcessorStep
         # because the tokenizer step expects normalized state in [-1, 1] range for discretization
         NormalizerProcessorStep(
@@ -193,7 +202,7 @@ def make_pi05_pre_post_processors(
         ),
         Pi05PrepareStateTokenizerProcessorStep(max_state_dim=config.max_state_dim),
         TokenizerProcessorStep(
-            tokenizer_name=getattr(config, 'text_tokenizer_name', 'google/paligemma-3b-pt-224'),
+            tokenizer_name=getattr(config, "text_tokenizer_name", "google/paligemma-3b-pt-224"),
             max_length=config.tokenizer_max_length,
             padding_side="right",
             padding="max_length",
@@ -204,6 +213,12 @@ def make_pi05_pre_post_processors(
     output_steps: list[ProcessorStep] = [
         UnnormalizerProcessorStep(
             features=config.output_features, norm_map=config.normalization_mapping, stats=dataset_stats
+        ),
+        AbsoluteActionsProcessorStep(
+            enabled=config.use_relative_actions,
+            exclude_joints=config.relative_exclude_joints,
+            action_names=config.action_feature_names or None,
+            relative_step=relative_step,
         ),
         DeviceProcessorStep(device="cpu"),
     ]

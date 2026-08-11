@@ -36,7 +36,11 @@ import torch
 from tqdm import tqdm
 
 from lerobot.datasets.aggregate import aggregate_datasets
-from lerobot.datasets.compute_stats import aggregate_stats
+from lerobot.datasets.compute_stats import (
+    aggregate_stats,
+    compute_episode_stats,
+    compute_relative_action_stats,
+)
 from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.datasets.utils import (
     DATA_DIR,
@@ -51,7 +55,7 @@ from lerobot.datasets.utils import (
     write_stats,
     write_tasks,
 )
-from lerobot.utils.constants import HF_LEROBOT_HOME
+from lerobot.utils.constants import ACTION, HF_LEROBOT_HOME, OBS_STATE
 
 
 def _load_episode_with_stats(src_dataset: LeRobotDataset, episode_idx: int) -> dict:
@@ -268,6 +272,82 @@ def merge_datasets(
     )
 
     return merged_dataset
+
+
+def recompute_stats(
+    dataset: LeRobotDataset,
+    skip_image_video: bool = True,
+    relative_action: bool = False,
+    relative_exclude_joints: list[str] | None = None,
+    chunk_size: int = 50,
+    num_workers: int = 0,
+) -> LeRobotDataset:
+    """Recompute dataset stats, optionally in relative-joint/absolute-gripper space."""
+    features = dataset.meta.features
+    meta_keys = {"index", "episode_index", "task_index", "frame_index", "timestamp"}
+    numeric_features = {
+        key: value
+        for key, value in features.items()
+        if value["dtype"] not in ["image", "video", "string"] and key not in meta_keys
+    }
+    if skip_image_video:
+        features_to_compute = numeric_features
+    else:
+        features_to_compute = {
+            key: value
+            for key, value in features.items()
+            if value["dtype"] != "string" and key not in meta_keys
+        }
+
+    relative_action_stats = None
+    if relative_action:
+        if ACTION not in features or OBS_STATE not in features:
+            raise ValueError(
+                f"Relative action stats require both {ACTION!r} and {OBS_STATE!r} dataset features"
+            )
+        exclude_joints = ["gripper"] if relative_exclude_joints is None else relative_exclude_joints
+        relative_action_stats = compute_relative_action_stats(
+            hf_dataset=dataset.hf_dataset,
+            features=features,
+            chunk_size=chunk_size,
+            exclude_joints=exclude_joints,
+            num_workers=num_workers,
+        )
+        features_to_compute.pop(ACTION, None)
+
+    data_dir = dataset.root / DATA_DIR
+    parquet_files = sorted(data_dir.glob("*/*.parquet"))
+    if not parquet_files:
+        raise ValueError(f"No parquet files found in {data_dir}")
+
+    all_episode_stats = []
+    numeric_keys = [
+        key for key, value in features_to_compute.items() if value["dtype"] not in ["image", "video"]
+    ]
+    for parquet_path in tqdm(parquet_files, desc="Computing stats from data files"):
+        df = pd.read_parquet(parquet_path)
+        for episode_index in sorted(df["episode_index"].unique()):
+            episode_df = df[df["episode_index"] == episode_index]
+            episode_data = {}
+            for key in numeric_keys:
+                if key not in episode_df.columns:
+                    continue
+                values = episode_df[key].values
+                episode_data[key] = np.stack(values) if hasattr(values[0], "__len__") else np.asarray(values)
+            all_episode_stats.append(compute_episode_stats(episode_data, features_to_compute))
+
+    new_stats = aggregate_stats(all_episode_stats) if all_episode_stats else {}
+    if relative_action_stats is not None:
+        new_stats[ACTION] = relative_action_stats
+
+    if dataset.meta.stats:
+        for key, value in dataset.meta.stats.items():
+            new_stats.setdefault(key, value)
+
+    write_stats(new_stats, dataset.root)
+    dataset.meta.stats = new_stats
+    logging.info("Dataset statistics recomputed successfully")
+    return dataset
 
 
 def modify_features(

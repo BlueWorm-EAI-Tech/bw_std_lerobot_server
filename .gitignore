@@ -181,3 +181,4 @@ outputs/
 # Local Mantis PI05 deployment state
 .venv-pi05/
 deploy/mantis_pi05_folding/server.env
+nohup.out
