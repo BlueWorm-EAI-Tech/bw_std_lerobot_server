@@ -4,12 +4,26 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VENV_DIR="${PI05_VENV_DIR:-$REPO_ROOT/.venv-pi05}"
-PYTHON_BIN="${PI05_BOOTSTRAP_PYTHON:-python3.10}"
-TORCH_INDEX_URL="${PI05_TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}"
+UV_BIN="${PI05_UV_BIN:-}"
 
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  echo "Python 3.10 was not found: $PYTHON_BIN"
-  echo "Install python3.10 and python3.10-venv, or set PI05_BOOTSTRAP_PYTHON."
+if [ -z "$UV_BIN" ]; then
+  if command -v uv >/dev/null 2>&1; then
+    UV_BIN="$(command -v uv)"
+  elif [ -x "${HOME}/.local/bin/uv" ]; then
+    UV_BIN="${HOME}/.local/bin/uv"
+  else
+    if ! command -v curl >/dev/null 2>&1; then
+      echo "uv and curl were not found. Install either uv or curl first."
+      exit 1
+    fi
+    echo "uv was not found; installing it with the official Astral installer."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    UV_BIN="${HOME}/.local/bin/uv"
+  fi
+fi
+
+if [ ! -x "$UV_BIN" ]; then
+  echo "uv executable does not exist: $UV_BIN"
   exit 1
 fi
 
@@ -17,28 +31,16 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   echo "Warning: ffmpeg is not installed. It is required for dataset/video workflows."
 fi
 
-if [ ! -x "$VENV_DIR/bin/python" ]; then
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-fi
+echo "Using $($UV_BIN --version)"
+echo "Synchronizing the locked PI05 environment at: $VENV_DIR"
+UV_PROJECT_ENVIRONMENT="$VENV_DIR" \
+  "$UV_BIN" sync \
+    --project "$SCRIPT_DIR" \
+    --locked \
+    --no-dev
 
 PYTHON="$VENV_DIR/bin/python"
-"$PYTHON" -m pip install --upgrade pip setuptools wheel
-
-# Install a CUDA build supported by the repository's torch/torchvision version ranges.
-"$PYTHON" -m pip install \
-  --index-url "$TORCH_INDEX_URL" \
-  "torch==2.7.1" \
-  "torchvision==0.22.1"
-
-# Install the project without the broad optional extras, then add the PI05 server dependencies.
-"$PYTHON" -m pip install -e "$REPO_ROOT"
-"$PYTHON" -m pip install \
-  "transformers==4.53.2" \
-  "scipy==1.14.1" \
-  "websockets==15.0.1" \
-  "pytest==8.4.2"
-
-"$PYTHON" -m pip check
+"$UV_BIN" pip check --python "$PYTHON"
 "$PYTHON" - <<'PY'
 import torch
 import transformers
@@ -52,9 +54,11 @@ print("visible GPUs:", torch.cuda.device_count())
 print("transformers:", transformers.__version__)
 print("websockets:", websockets.__version__)
 
+if torch.__version__.split("+")[0] != "2.7.1":
+    raise SystemExit(f"Unexpected torch version: {torch.__version__}")
 if not torch.cuda.is_available():
     raise SystemExit(
-        "CUDA is not available. Check the NVIDIA driver and PI05_TORCH_INDEX_URL before serving."
+        "CUDA is not available. Install a driver compatible with the locked CUDA 12.8 runtime."
     )
 PY
 

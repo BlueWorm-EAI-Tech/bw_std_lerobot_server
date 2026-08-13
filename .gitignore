@@ -20,12 +20,14 @@ venv/
 env.bak/
 venv.bak/
 .python-version
+!deploy/mantis_pi05_folding/.python-version
 __pypackages__/
 node_modules/
 
 # Lock files
 poetry.lock
 uv.lock
+!deploy/mantis_pi05_folding/uv.lock
 Pipfile.lock
 
 ### Build & Distribution ###

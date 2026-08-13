@@ -1,6 +1,6 @@
 # PI05 叠衣项目 Git 与 4x4090 迁移手册
 
-> 当前文件位于 `/home/lcjs-szw/doc`，这个目录不属于 LeRobot Git 仓库。编辑这里的文件只会保存在本机，不会自动出现在 `git status` 中，也不会随项目上传 GitHub。需要把本文档一起上传时，请执行第 4.2 节的命令，将它复制回发布仓库的 `docs/mantis/` 后再提交。
+> 本文档已经位于发布仓库的 `docs/mantis/` 中，会随发布分支一起上传 GitHub。本机 `/home/lcjs-szw/doc/` 中可能存在旧副本，不要在旧副本上继续维护。
 
 ## 1. 先理解 Git 在做什么
 
@@ -459,32 +459,20 @@ b7a43844 feat: include current PI05 experiments in release
 2b1ff63b docs: add portable PI05 folding deployment
 ```
 
-### 4.2 把本机这份文档加入发布仓库
+### 4.2 更新仓库内的迁移文档
 
-本文档现在位于 `/home/lcjs-szw/doc`，不在 Git 仓库中。执行以下命令把它复制回发布仓库：
+本文档已经位于发布仓库的 `docs/mantis/` 中。编辑后直接检查并提交，不要再从 `/home/lcjs-szw/doc` 复制旧副本：
 
 ```bash
-mkdir -p /home/lcjs-szw/repos/lerobot-pi05-folding-release/docs/mantis
-
-cp /home/lcjs-szw/doc/PI05_FOLDING_GIT_AND_4090_MIGRATION_ZH.md \
-  /home/lcjs-szw/repos/lerobot-pi05-folding-release/docs/mantis/
-
 cd /home/lcjs-szw/repos/lerobot-pi05-folding-release
 git status --short -- docs/mantis/PI05_FOLDING_GIT_AND_4090_MIGRATION_ZH.md
 git diff -- docs/mantis/PI05_FOLDING_GIT_AND_4090_MIGRATION_ZH.md
-```
-
-确认内容正确后，只暂存和提交这份文档：
-
-```bash
 git add docs/mantis/PI05_FOLDING_GIT_AND_4090_MIGRATION_ZH.md
 git diff --cached --stat
 git diff --cached -- docs/mantis/PI05_FOLDING_GIT_AND_4090_MIGRATION_ZH.md
 git commit -m "docs: expand local Git and GitHub workflow"
 git log --oneline --decorate -5
 ```
-
-不要在复制之前提交当前的删除状态，否则 Git 会记录“从发布版删除迁移文档”。
 
 ### 4.3 上传前做最后检查
 
@@ -622,12 +610,11 @@ git remote get-url origin
 
 ## 5. 新 4x4090 服务器克隆代码
 
-先安装 NVIDIA 驱动、Git、Git LFS、Python 3.10、`python3.10-venv` 和 ffmpeg。确认四张卡：
+先安装 NVIDIA 驱动、Git、Git LFS 和 ffmpeg。安装脚本会自动安装 uv，uv 会按照 `.python-version` 自动准备 Python 3.10.19，不再要求手工创建 Conda 或 venv。确认四张卡：
 
 ```bash
 nvidia-smi
 git --version
-python3.10 --version
 ffmpeg -version
 ```
 
@@ -655,12 +642,29 @@ git -C ~/repos/lerobot_mantis_runtime rev-parse HEAD
 
 ## 6. 安装 PI05 服务端环境
 
+只需要执行一个脚本：
+
 ```bash
 cd ~/repos/lerobot
 bash deploy/mantis_pi05_folding/install_server.sh
 ```
 
-默认使用系统 Python 3.10 创建 `~/repos/lerobot/.venv-pi05`，并安装 PyTorch 2.7.1、CUDA 12.8 wheel、Transformers 4.53.2 和服务端依赖。如果新服务器的驱动不支持 CUDA 12.8，先升级驱动；也可通过 `PI05_TORCH_INDEX_URL` 选择 PyTorch 官方提供的其他 CUDA wheel。
+脚本会依次完成以下操作：
+
+1. 检测 uv；缺少时通过 Astral 官方安装器安装。
+2. 使用部署目录中的 `.python-version` 准备 Python 3.10.19。
+3. 使用部署目录中的 `uv.lock` 创建 `~/repos/lerobot/.venv-pi05`。
+4. 严格安装锁定的 PyTorch 2.7.1、CUDA 12.8 wheel、Transformers 4.53.2 和 PI05 服务端依赖。
+5. 执行 `pip check`，并检查 PyTorch 能否访问 NVIDIA GPU。
+
+脚本内部使用的核心命令是：
+
+```bash
+UV_PROJECT_ENVIRONMENT="$PWD/.venv-pi05" \
+uv sync --project deploy/mantis_pi05_folding --locked --no-dev
+```
+
+`--locked` 表示禁止在目标机器上自行改写依赖版本。如果部署目录中的 `pyproject.toml` 与 `uv.lock` 不一致，安装会直接失败，要求发布者先更新并提交锁文件。该部署项目只锁 PI05 训练和服务依赖，并以 editable 方式引用仓库根目录的 LeRobot 代码，不会安装其他机器人的可选依赖。CUDA 12.8 wheel 已绑定到 PyTorch 官方索引；如果驱动不支持该运行时，应升级 NVIDIA 驱动，而不是在部署机器上临时更换依赖。
 
 ## 7. 传输模型
 
@@ -820,7 +824,7 @@ git diff --cached -- 文件路径
 git log --oneline --decorate -5
 ```
 
-如果刚才编辑的是 `/home/lcjs-szw/doc` 下的本文档，因为它在仓库外，所以项目 `git status` 不会显示；按第 4.2 节复制回仓库。
+如果误编辑了 `/home/lcjs-szw/doc` 下的旧副本，项目 `git status` 不会显示；应把有效修改重新应用到仓库中的 `docs/mantis/PI05_FOLDING_GIT_AND_4090_MIGRATION_ZH.md`，不要直接用旧副本覆盖新版文档。
 
 ### 12.4 `Your branch is ahead`
 
