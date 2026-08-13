@@ -610,6 +610,8 @@ git remote get-url origin
 
 ## 5. 新 4x4090 服务器克隆代码
 
+需要直接复制执行命令时，优先使用 [新电脑部署命令](../../deploy/mantis_pi05_folding/NEW_MACHINE_QUICKSTART_ZH.md)。该快速文档明确区分旧电脑和新电脑；本节继续解释各步骤的原因和注意事项。
+
 先安装 NVIDIA 驱动、Git、Git LFS 和 ffmpeg。安装脚本会自动安装 uv，uv 会按照 `.python-version` 自动准备 Python 3.10.19，不再要求手工创建 Conda 或 venv。确认四张卡：
 
 ```bash

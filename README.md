@@ -14,6 +14,14 @@
 
 </div>
 
+> [!IMPORTANT]
+> **Mantis PI05 叠衣发布版：新 GPU 服务器部署入口**
+>
+> 在另一台 4x4090 电脑上克隆、使用 uv 一键安装环境、传输模型并启动 WebSocket 服务，请直接按照
+> [新电脑部署命令（中文）](./deploy/mantis_pi05_folding/NEW_MACHINE_QUICKSTART_ZH.md) 执行。
+> 更完整的 Git、训练和迁移说明见
+> [PI05 叠衣项目迁移手册](./docs/mantis/PI05_FOLDING_GIT_AND_4090_MIGRATION_ZH.md)。
+
 **LeRobot** aims to provide models, datasets, and tools for real-world robotics in PyTorch. The goal is to lower the barrier to entry so that everyone can contribute to and benefit from shared datasets and pretrained models.
 
 🤗 A hardware-agnostic, Python-native interface that standardizes control across diverse platforms, from low-cost arms (SO-100) to humanoids.
