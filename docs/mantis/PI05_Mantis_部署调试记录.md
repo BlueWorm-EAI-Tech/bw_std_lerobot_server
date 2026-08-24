@@ -98,7 +98,7 @@ class MoveTaskToComplementaryDataProcessorStep(ProcessorStep):
 ## 2. 服务器部署
 
 ### 2.1 服务器架构
-- **远程服务器**: 123.56.216.162:8000
+- **远程服务器**: <GPU服务器IP>:8000
 - **本地机器**: 运行 Mantis 机器人的机器
 - **通信方式**: WebSocket (JSON 协议)
 

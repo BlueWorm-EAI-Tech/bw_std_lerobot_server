@@ -144,7 +144,7 @@ python scripts/websocket-act/websocket_act_server.py \
 ```bash
 cd /home/lcjs-szw/cc_test/act_client
 
-bash start.sh --server ws://123.56.216.162:8000
+bash start.sh --server ws://<GPU服务器IP>:8000
 ```
 
 #### 客户端参数
@@ -251,7 +251,7 @@ python scripts/websocket-act/websocket_smolvla_server.py \
 ```bash
 cd /home/lcjs-szw/cc_test/act_client
 
-bash start_smolvla.sh --server ws://123.56.216.162:8001
+bash start_smolvla.sh --server ws://<GPU服务器IP>:8001
 ```
 
 ### 5.4 SmolVLA 推理效果
@@ -330,7 +330,7 @@ python ~/lerobot_mantis_v2/lerobot_robot_bw/set_control_mode.py 1
 python ~/lerobot_mantis_v2/lerobot_robot_bw/set_ctrl_src.py 2
 
 # 启动 PI05 客户端
-bash start_pi05.sh --server ws://123.56.216.162:8004
+bash start_pi05.sh --server ws://<GPU服务器IP>:8004
 ```
 
 ### 6.5 推理效果
