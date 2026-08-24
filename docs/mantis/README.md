@@ -4,12 +4,12 @@
 
 ## 模型总览
 
-| 模型 | 任务 | 训练入口 | 推理入口 | 当前情况 |
-| --- | --- | --- | --- | --- |
-| π0.5 | 衣物折叠 | `examples/training/mantis/train_pi05_mantis.sh` | `scripts/websocket-server/pi05/websocket_pi05_server.py` | 主要训练和服务代码已有；公司 checkpoint 待上传 |
-| ACT | 抓取平放的东方树叶饮料容器并直立放置 | `docs/mantis/MANTIS_TRAINING_GUIDE.md` 与 LeRobot ACT 训练入口 | `scripts/websocket-server/act/websocket_act_server.py` | 任务已开展；模型和完整验收资料待整理 |
-| ACT | 根据语言指令识别、选择并抓取饮料 | 沿用 ACT 训练链路 | ACT WebSocket 服务 | 正在开发，不填写未经确认的成功率 |
-| SmolVLA | 方块抓取—放置 | `examples/training/mantis/train_smolvla_mantis.sh` | `scripts/websocket-server/smolvla/websocket_smolvla_server.py` | 训练和服务代码已有；统一机器人端接入不完整 |
+| 模型    | 任务                                 | 训练入口                                                       | 推理入口                                                       | 当前情况                                       |
+| ------- | ------------------------------------ | -------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------- |
+| π0.5    | 衣物折叠                             | `examples/training/mantis/train_pi05_mantis.sh`                | `scripts/websocket-server/pi05/websocket_pi05_server.py`       | 主要训练和服务代码已有；公司 checkpoint 待上传 |
+| ACT     | 抓取平放的东方树叶饮料容器并直立放置 | `docs/mantis/MANTIS_TRAINING_GUIDE.md` 与 LeRobot ACT 训练入口 | `scripts/websocket-server/act/websocket_act_server.py`         | 任务已开展；模型和完整验收资料待整理           |
+| ACT     | 根据语言指令识别、选择并抓取饮料     | 沿用 ACT 训练链路                                              | ACT WebSocket 服务                                             | 正在开发，不填写未经确认的成功率               |
+| SmolVLA | 方块抓取—放置                        | `examples/training/mantis/train_smolvla_mantis.sh`             | `scripts/websocket-server/smolvla/websocket_smolvla_server.py` | 训练和服务代码已有；统一机器人端接入不完整     |
 
 ## 推荐阅读顺序
 
