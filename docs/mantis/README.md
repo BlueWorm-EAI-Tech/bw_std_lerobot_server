@@ -17,7 +17,7 @@
 2. 按任务选择 π0.5、ACT 或 SmolVLA 的训练脚本，检查脚本中的数据、基础模型和输出目录。
 3. 训练前确认数据包含环境、左腕和右腕三路图像，状态、动作和任务文本与模型配置一致。
 4. 训练完成后记录使用的 checkpoint、配置和数据批次，再启动对应 WebSocket 服务。
-5. 机器人端使用 [lerobot_mantis_runtime](https://github.com/BlueWorm-EAI-Tech/lerobot_mantis_runtime) 完成相机检查、连接和安全限制。
+5. 机器人端使用 [VLA_lerobot_mantis_runtime](https://github.com/BlueWorm-EAI-Tech/VLA_lerobot_mantis_runtime) 完成相机检查、连接和安全限制。
 
 ## 训练代码在哪里
 
