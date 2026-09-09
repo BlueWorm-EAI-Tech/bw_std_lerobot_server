@@ -1,5 +1,8 @@
 # Mantis 模型与任务
 
+> **增值服务 · 文档 V0.5（2026-09-08）**。蓝虫 VLA 模型适配、训练、端云推理和配套手册默认归入增值服务。
+> [最新文档与 PDF](https://github.com/BlueWorm-EAI-Tech/BlueWorm-Docs/blob/main/docs/documentation-release.md) · [任务与模型状态](https://github.com/BlueWorm-EAI-Tech/BlueWorm-Docs/blob/main/docs/embodied/models-and-tasks.md)。本页保留项目代码入口，部署时使用与服务端匹配的客户端。
+
 本页汇总 BlueWorm 已经开展的 π0.5、ACT 和 SmolVLA 工作，帮助新成员直接找到训练脚本、推理服务和任务说明。公司模型 checkpoint 尚未统一上传，因此页面只提供已经存在的代码入口，不设置无效下载链接。
 
 ## 模型总览
