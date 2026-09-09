@@ -16,6 +16,8 @@ limitations under the License.
 
 # Generating the documentation
 
+BlueWorm Mantis adaptations, training/inference tooling, manuals and technical support are provided as embodied-AI value-added services. The current handbook edition is **V0.5 (2026-09-08)**: [latest documentation and PDF](https://github.com/BlueWorm-EAI-Tech/BlueWorm-Docs/blob/main/docs/documentation-release.md). The instructions below build the upstream LeRobot documentation; upstream licenses remain unchanged.
+
 To generate the documentation, you first have to build it. Several packages are necessary to build the doc,
 you can install them with the following command, at the root of the code repository:
 

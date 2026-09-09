@@ -1,6 +1,10 @@
 > [!IMPORTANT]
 > 这是 BlueWorm 面向 Mantis 机器人的内部 LeRobot 适配仓库，当前保持为 Private。仓库基于 Hugging Face LeRobot 开展 π0.5、ACT 和 SmolVLA 的训练与推理适配；它不是 LeRobot 官方发行版。
 
+> **具身智能增值服务 · 文档 V0.5（2026-09-08）**
+> 本仓库中的蓝虫模型适配、训练、端云推理、配套工具、手册和技术支持默认归入增值服务；上游 LeRobot 的许可证保持不变。
+> [服务内容](https://github.com/BlueWorm-EAI-Tech/BlueWorm-Docs/blob/main/docs/embodied/service-scope.md) · [最新文档与 PDF](https://github.com/BlueWorm-EAI-Tech/BlueWorm-Docs/blob/main/docs/documentation-release.md)。文档版本与模型、软件版本分别维护。
+
 ## BlueWorm Mantis 快速入口
 
 | 需要完成的工作                   | 文档或代码入口                                                                              |
@@ -9,7 +13,7 @@
 | 训练 π0.5                        | [训练脚本](examples/training/mantis/train_pi05_mantis.sh)                                   |
 | 训练 ACT                         | [ACT 训练说明](docs/mantis/MANTIS_TRAINING_GUIDE.md)                                        |
 | 训练 SmolVLA                     | [训练脚本](examples/training/mantis/train_smolvla_mantis.sh)                                |
-| 启动 WebSocket 推理服务          | [`scripts/websocket-server/`](scripts/websocket-server/)                                    |
+| 启动端云推理服务                 | [`scripts/websocket-server/`](scripts/websocket-server/)                                    |
 | 阅读公司具身智能手册             | [BlueWorm-Docs](https://github.com/BlueWorm-EAI-Tech/BlueWorm-Docs/tree/main/docs/embodied) |
 
 公司模型 checkpoint 尚未建立统一下载入口。运行脚本前需要替换数据集、模型和输出目录；不要直接沿用开发机器路径。下方为上游 LeRobot 项目介绍和通用文档。
