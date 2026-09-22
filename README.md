@@ -1,5 +1,5 @@
 > [!IMPORTANT]
-> 这是 BlueWorm 面向 Mantis 机器人的内部 LeRobot 适配仓库，当前保持为 Private。仓库基于 Hugging Face LeRobot 开展 π0.5、ACT 和 SmolVLA 的训练与推理适配；它不是 LeRobot 官方发行版。
+> 这是 BlueWorm 面向 Mantis 机器人的内部 LeRobot 适配仓库。仓库基于 Hugging Face LeRobot 开展 π0.5、ACT 和 SmolVLA 的训练与推理适配；它不是 LeRobot 官方发行版。
 
 > **具身智能增值服务 · 文档 V0.5（2026-09-08）**
 > 本仓库中的蓝虫模型适配、训练、端云推理、配套工具、手册和技术支持默认归入增值服务；上游 LeRobot 的许可证保持不变。
